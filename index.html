@@ -198,8 +198,7 @@ const money=v=>fmt.format(Math.round(v||0));
 const int=n=>Math.max(0,parseInt(n||0,10));
 const clean=s=>(s||"").toString().trim();
 const BADGE=$("#syncBadge");
-const CACHE="uragrafica_cache_v2";
-const REVKEY="uragrafica_rev_v2";
+const CACHE="uragrafica_cache_v3";
 function setBadge(txt){ BADGE.textContent=txt; }
 
 /* ===== Auto-categoría ===== */
@@ -230,8 +229,6 @@ function autoCategory(name){
 /* ===== Estado ===== */
 let CAT={};
 let INDEX={};
-let REV=Number(localStorage.getItem(REVKEY)||0);
-
 function rebuildIndex(){
   INDEX={};
   Object.keys(CAT).forEach(k=>{
@@ -266,7 +263,7 @@ function setHint(){
 function renderTable(){
   const cat=$("#categoria").value; const cont=$("#tablaCat"); const arr=CAT[cat]||[];
   if(!arr.length){ cont.innerHTML="<div class='muted' style='padding:8px'>No hay ítems.</div>"; return; }
-  const rows=arr.map((it,i)=>{
+  const rows=arr.map((it)=>{
     const tipo=it.unit?`<span class="chip">Unitario</span>`:`<span class="chip">Por cantidad</span>`;
     const val = it.unit? money(it.unit) : it.tiers.map(t=>`${t.qty}→${money(t.price)}`).join(" · ");
     return `<tr>
@@ -274,8 +271,8 @@ function renderTable(){
       <td>${tipo}</td>
       <td>${val||"-"}</td>
       <td style="text-align:right">
-        <button class="edit" data-i="${i}">Editar</button>
-        <button class="del" data-i="${i}">Eliminar</button>
+        <button class="edit" data-name="${encodeURIComponent(it.name)}">Editar</button>
+        <button class="del" data-name="${encodeURIComponent(it.name)}">Eliminar</button>
       </td>
     </tr>`;
   }).join("");
@@ -285,18 +282,19 @@ function renderTable(){
 
   cont.querySelectorAll(".del").forEach(b=>{
     b.addEventListener("click",async ()=>{
-      const i=parseInt(b.dataset.i,10);
-      if(!confirm("¿Seguro que quieres eliminar este ítem del catálogo?")) return;
-      (CAT[$("#categoria").value]||[]).splice(i,1);
-      await persist(true);
+      const cat=$("#categoria").value;
+      const name=decodeURIComponent(b.dataset.name);
+      if(!confirm(`¿Eliminar “${name}”?`)) return;
+      CAT[cat] = (CAT[cat]||[]).filter(x=>x.name!==name);
+      await persist();  // guarda y sube
       applyAndRender();
     });
   });
   cont.querySelectorAll(".edit").forEach(b=>{
     b.addEventListener("click",()=>{
-      const i=parseInt(b.dataset.i,10);
       const cat=$("#categoria").value;
-      const it=CAT[cat][i];
+      const name=decodeURIComponent(b.dataset.name);
+      const it=(CAT[cat]||[]).find(x=>x.name===name);
       $("#g_cat").value=cat;
       $("#g_name").value=it.name;
       if(it.unit){
@@ -381,26 +379,24 @@ async function agregar(){
     alert("Completa categoría, producto y precio (y cantidad si es por tier)."); return;
   }
   if(tipo==="unit") upsertUnit(cat,name,price); else upsertTier(cat,name,qty,price);
-  await persist(true);         // guarda ASAP
-  applyAndRender();            // refleja al instante
+  await persist();         // guarda y sube
+  applyAndRender();        // refleja al instante
   $("#g_name").value=""; $("#g_price").value="0"; $("#g_qty").value="1000";
 }
 
 /* ===== Persistencia (local + Firestore) ===== */
 function applyAndRender(){
   rebuildIndex(); fillCats(); fillProducts(); setHint(); renderTable();
-  setBadge("Listo ✓ (local)");
+  setBadge("Listo ✓");
 }
 function saveCache(){
   localStorage.setItem(CACHE, JSON.stringify(CAT));
-  localStorage.setItem(REVKEY, String(REV));
 }
-async function persist(bump=false){
+async function persist(){
   try{
-    if(bump) REV = Date.now();
     saveCache();
     setBadge("Guardando…");
-    await setDoc(docRef, { catalog: CAT, rev: REV, updatedAt: serverTimestamp() }, { merge:true });
+    await setDoc(docRef, { catalog: CAT, updatedAt: serverTimestamp() });
     setBadge("Sincronizado ✓");
   }catch(e){
     console.warn(e);
@@ -597,7 +593,7 @@ SELLO EN MADERA	1	45000
 PASTELITOS	1000	100000
 `;
 
-/* ===== Carga inicial (rápida) ===== */
+/* ===== Carga inicial rápida ===== */
 function fromSeedToCat(seed){
   const lines=seed.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
   const cat={};
@@ -612,47 +608,32 @@ function fromSeedToCat(seed){
     it.tiers.push({qty,price});
   }
   Object.keys(cat).forEach(k=>{
-    cat[k].forEach(it=>{
-      it.tiers?.sort((a,b)=>a.qty-b.qty);
-    });
+    cat[k].forEach(it=>{ if(it.tiers) it.tiers.sort((a,b)=>a.qty-b.qty); });
   });
   return cat;
 }
 function loadCacheFast(){
   const raw=localStorage.getItem(CACHE);
   if(raw){
-    try{
-      CAT=JSON.parse(raw)||{};
-      applyAndRender();
-      setBadge("Cache ✓");
-      return true;
-    }catch{}
+    try{ CAT=JSON.parse(raw)||{}; applyAndRender(); setBadge("Cache ✓"); return; }catch{}
   }
-  // si no hay cache, usa seed para mostrar algo inmediato
-  CAT = fromSeedToCat(SEED);
-  REV = Date.now();
-  applyAndRender();
-  setBadge("Seed ✓");
-  return false;
+  CAT = fromSeedToCat(SEED); applyAndRender(); setBadge("Seed ✓");
 }
 
-/* ===== Suscripción Firestore (refresca sin pisar cambios locales recientes) ===== */
+/* ===== Suscripción Firestore (aplica siempre cambios remotos) ===== */
+function deepEqual(a,b){ return JSON.stringify(a)===JSON.stringify(b); }
 async function subscribeFirestore(){
   try{
     const snap = await getDoc(docRef);
-    if(!snap.exists()){
-      // sube lo que tengas (seed/cache) como primera versión
-      await persist(true);
-    }
+    if(!snap.exists()) await persist(); // sube tu seed/cache como primera versión
   }catch(e){ console.warn(e); }
 
   onSnapshot(docRef, (ds)=>{
     const data = ds.data();
     if(!data || !data.catalog) return;
-    // solo actualizar si la versión remota es más nueva
-    if(Number(data.rev||0) > REV){
-      CAT = data.catalog;
-      REV = Number(data.rev||0);
+    const remote = data.catalog;
+    if(!deepEqual(remote, CAT)){
+      CAT = remote;
       saveCache();
       applyAndRender();
       setBadge("En vivo ✓");
@@ -679,8 +660,9 @@ $("#g_tipo").addEventListener("change",()=>{
 });
 
 /* ===== Go! ===== */
-loadCacheFast();   // vista inmediata
-subscribeFirestore(); // y luego sincroniza
+loadCacheFast();     // aparece al instante
+subscribeFirestore();// y sincroniza en vivo
 </script>
 </body>
 </html>
+
