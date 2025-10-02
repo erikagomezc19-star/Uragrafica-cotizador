@@ -55,7 +55,7 @@
   <div class="bar">
     <div class="logo">Uragráfica</div>
     <div class="actions">
-      <span id="syncBadge" class="chip">Sincronizando…</span>
+      <span id="syncBadge" class="chip">Cargando…</span>
       <button id="btnCalcular" class="primary">Calcular</button>
       <button id="btnPrint" class="secondary">Imprimir / PDF</button>
     </div>
@@ -69,10 +69,10 @@
     <h2>Selecciona</h2>
     <div class="grid g4">
       <label>Categoría *
-        <select id="categoria"></select>
+        <select id="categoria"><option>Cargando…</option></select>
       </label>
       <label>Producto *
-        <select id="producto"></select>
+        <select id="producto"><option>—</option></select>
       </label>
       <label>Cantidad *
         <input id="cantidad" type="number" min="1" value="1000"/>
@@ -172,13 +172,12 @@ ADHESIVO 80X40 SIN LAMINAR	1	25000
   </section>
 </main>
 
-<!-- Firebase + App -->
+<!-- Firebase + App (sin login) -->
 <script type="module">
-/* ===== Firebase (SDK v10+) ===== */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, getDoc, onSnapshot, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-/* ⚠️ Pega aquí TU configuración */
+/* ⚠️ Cambia por tu config */
 const firebaseConfig = {
   apiKey: "TU_API_KEY",
   authDomain: "TU_AUTH_DOMAIN",
@@ -199,11 +198,11 @@ const money=v=>fmt.format(Math.round(v||0));
 const int=n=>Math.max(0,parseInt(n||0,10));
 const clean=s=>(s||"").toString().trim();
 const BADGE=$("#syncBadge");
-const LSK="uragrafica_cache_v1";
-
+const CACHE="uragrafica_cache_v2";
+const REVKEY="uragrafica_rev_v2";
 function setBadge(txt){ BADGE.textContent=txt; }
 
-/* ===== Auto-categoría (Stickers ≠ Adhesivos) ===== */
+/* ===== Auto-categoría ===== */
 function autoCategory(name){
   const s=(name||"").toUpperCase();
   if (/(^|\s)STI?C?K?KER(S)?\b|(^|\s)STIKER(S)?\b|PEGATINA(S)?\b|CALCOMANI(A|AS)\b/.test(s)) return "Stickers";
@@ -229,8 +228,9 @@ function autoCategory(name){
 }
 
 /* ===== Estado ===== */
-let CAT={};  // catálogo en memoria
+let CAT={};
 let INDEX={};
+let REV=Number(localStorage.getItem(REVKEY)||0);
 
 function rebuildIndex(){
   INDEX={};
@@ -239,21 +239,19 @@ function rebuildIndex(){
     (CAT[k]||[]).forEach(it=>INDEX[k][it.name]=it);
   });
 }
-
-/* ===== UI ===== */
 function fillCats(){
   const sel=$("#categoria"); const keep=sel.value; sel.innerHTML="";
   Object.keys(CAT).sort().forEach(c=>{
     const o=document.createElement("option"); o.value=o.textContent=c; sel.appendChild(o);
   });
-  if(keep && CAT[keep]) sel.value=keep;
+  if(keep && CAT[keep]) sel.value=keep; else sel.selectedIndex=0;
 }
 function fillProducts(){
   const cat=$("#categoria").value; const sel=$("#producto"); const keep=sel.value; sel.innerHTML="";
   (CAT[cat]||[]).map(x=>x.name).sort().forEach(n=>{
     const o=document.createElement("option"); o.value=o.textContent=n; sel.appendChild(o);
   });
-  if((CAT[cat]||[]).some(x=>x.name===keep)) sel.value=keep;
+  if((CAT[cat]||[]).some(x=>x.name===keep)) sel.value=keep; else sel.selectedIndex=0;
 }
 function setHint(){
   const cat=$("#categoria").value, name=$("#producto").value;
@@ -265,8 +263,60 @@ function setHint(){
     el.textContent=`Tirajes: ${txt}${it.tiers.length>8?" …":""}`;
   } else el.textContent="Ítem sin precio.";
 }
+function renderTable(){
+  const cat=$("#categoria").value; const cont=$("#tablaCat"); const arr=CAT[cat]||[];
+  if(!arr.length){ cont.innerHTML="<div class='muted' style='padding:8px'>No hay ítems.</div>"; return; }
+  const rows=arr.map((it,i)=>{
+    const tipo=it.unit?`<span class="chip">Unitario</span>`:`<span class="chip">Por cantidad</span>`;
+    const val = it.unit? money(it.unit) : it.tiers.map(t=>`${t.qty}→${money(t.price)}`).join(" · ");
+    return `<tr>
+      <td>${it.name}</td>
+      <td>${tipo}</td>
+      <td>${val||"-"}</td>
+      <td style="text-align:right">
+        <button class="edit" data-i="${i}">Editar</button>
+        <button class="del" data-i="${i}">Eliminar</button>
+      </td>
+    </tr>`;
+  }).join("");
+  cont.innerHTML=`<table>
+    <thead><tr><th>Producto</th><th>Tipo</th><th>Precio / Tiers</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
 
-/* ===== Cálculo (usa tier inferior si no hay exacto) ===== */
+  cont.querySelectorAll(".del").forEach(b=>{
+    b.addEventListener("click",async ()=>{
+      const i=parseInt(b.dataset.i,10);
+      if(!confirm("¿Seguro que quieres eliminar este ítem del catálogo?")) return;
+      (CAT[$("#categoria").value]||[]).splice(i,1);
+      await persist(true);
+      applyAndRender();
+    });
+  });
+  cont.querySelectorAll(".edit").forEach(b=>{
+    b.addEventListener("click",()=>{
+      const i=parseInt(b.dataset.i,10);
+      const cat=$("#categoria").value;
+      const it=CAT[cat][i];
+      $("#g_cat").value=cat;
+      $("#g_name").value=it.name;
+      if(it.unit){
+        $("#g_tipo").value="unit";
+        $("#g_qty").disabled=true; $("#g_qty_wrap").style.opacity=0.35;
+        $("#g_price").value=it.unit;
+      }else{
+        $("#g_tipo").value="tier";
+        $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1;
+        const first=it.tiers[0]||{qty:1000,price:0};
+        $("#g_qty").value=first.qty;
+        $("#g_price").value=first.price;
+        alert("Edita precio/cantidad y pulsa “Agregar / Actualizar”. Cambia cantidad para añadir otro tier.");
+      }
+      window.scrollTo({top:0,behavior:"smooth"});
+    });
+  });
+}
+
+/* ===== Cálculo (silencioso) ===== */
 function priceByQty(it,qty){
   if(!it) return {base:0};
   if(it.unit && !(it.tiers?.length)) return {base:it.unit*qty};
@@ -277,7 +327,7 @@ function priceByQty(it,qty){
     let lower=null, higher=null;
     for(const t of tiers){ if(t.qty<=qty) lower=t; if(t.qty>=qty){ higher=t; break; } }
     const chosen = lower || higher || tiers[0];
-    const unit = chosen.price/ chosen.qty;
+    const unit   = chosen.price / chosen.qty;
     return {base:unit*qty};
   }
   return {base:0};
@@ -305,7 +355,7 @@ function calcular(){
     <div class="row"><strong>TOTAL:</strong><span>${money(total)}</span></div>`;
 }
 
-/* ===== CRUD catálogo ===== */
+/* ===== CRUD ===== */
 function ensureCat(name){ if(!CAT[name]) CAT[name]=[]; }
 function findItem(cat,name){ return (CAT[cat]||[]).find(x=>x.name===name); }
 function upsertUnit(cat,name,price){
@@ -331,112 +381,35 @@ async function agregar(){
     alert("Completa categoría, producto y precio (y cantidad si es por tier)."); return;
   }
   if(tipo==="unit") upsertUnit(cat,name,price); else upsertTier(cat,name,qty,price);
-  await persist();
+  await persist(true);         // guarda ASAP
+  applyAndRender();            // refleja al instante
   $("#g_name").value=""; $("#g_price").value="0"; $("#g_qty").value="1000";
 }
-function clearForm(){
-  $("#g_cat").value=""; $("#g_name").value="";
-  $("#g_tipo").value="tier";
-  $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1; $("#g_qty").value="1000";
-  $("#g_price").value="0";
-}
-$("#g_tipo").addEventListener("change",()=>{
-  const isU=$("#g_tipo").value==="unit";
-  $("#g_qty").disabled=isU;
-  $("#g_qty_wrap").style.opacity = isU ? 0.35 : 1;
-});
-$("#btnAgregar").addEventListener("click",agregar);
-$("#btnLimpiar").addEventListener("click",clearForm);
 
-function renderTable(){
-  const cat=$("#categoria").value; const cont=$("#tablaCat"); const arr=CAT[cat]||[];
-  if(!arr.length){ cont.innerHTML="<div class='muted' style='padding:8px'>No hay ítems.</div>"; return; }
-  const rows=arr.map((it,i)=>{
-    const tipo=it.unit?`<span class="chip">Unitario</span>`:`<span class="chip">Por cantidad</span>`;
-    const val = it.unit? money(it.unit) : it.tiers.map(t=>`${t.qty}→${money(t.price)}`).join(" · ");
-    return `<tr>
-      <td>${it.name}</td>
-      <td>${tipo}</td>
-      <td>${val||"-"}</td>
-      <td style="text-align:right">
-        <button class="edit" data-i="${i}">Editar</button>
-        <button class="del" data-i="${i}">Eliminar</button>
-      </td>
-    </tr>`;
-  }).join("");
-  cont.innerHTML=`<table>
-    <thead><tr><th>Producto</th><th>Tipo</th><th>Precio / Tiers</th><th></th></tr></thead>
-    <tbody>${rows}</tbody></table>`;
-
-  cont.querySelectorAll(".del").forEach(b=>{
-    b.addEventListener("click",async ()=>{
-      const i=parseInt(b.dataset.i,10);
-      if(!confirm("¿Seguro que quieres eliminar este ítem del catálogo?")) return;
-      CAT[cat].splice(i,1);
-      await persist();
-    });
-  });
-  cont.querySelectorAll(".edit").forEach(b=>{
-    b.addEventListener("click",()=>{
-      const i=parseInt(b.dataset.i,10);
-      const it=CAT[cat][i];
-      $("#g_cat").value=cat;
-      $("#g_name").value=it.name;
-      if(it.unit){
-        $("#g_tipo").value="unit";
-        $("#g_qty").disabled=true; $("#g_qty_wrap").style.opacity=0.35;
-        $("#g_price").value=it.unit;
-      }else{
-        $("#g_tipo").value="tier";
-        $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1;
-        const first=it.tiers[0]||{qty:1000,price:0};
-        $("#g_qty").value=first.qty;
-        $("#g_price").value=first.price;
-        alert("Edita precio/cantidad y pulsa “Agregar / Actualizar”. Cambia cantidad para añadir otro tier.");
-      }
-      window.scrollTo({top:0,behavior:"smooth"});
-    });
-  });
+/* ===== Persistencia (local + Firestore) ===== */
+function applyAndRender(){
+  rebuildIndex(); fillCats(); fillProducts(); setHint(); renderTable();
+  setBadge("Listo ✓ (local)");
 }
-
-/* ===== Importación masiva ===== */
-function parseMoney(s){
-  s=(s||"").toString().trim();
-  s=s.replace(/[^\d,\.]/g,"");
-  if(/^\d+,\d+$/.test(s)) s=s.replace(",", ""); // 6,60 -> 660
-  s=s.replace(/\./g,"").replace(/,/g,"");
-  const v=parseInt(s||"0",10);
-  return isFinite(v)?v:0;
+function saveCache(){
+  localStorage.setItem(CACHE, JSON.stringify(CAT));
+  localStorage.setItem(REVKEY, String(REV));
 }
-function bulkInto(catObj, txt, {auto=true,dest="Catálogo"}={}){
-  const lines=(txt||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  for(const ln of lines){
-    const p=ln.split(/\t+/);
-    if(p.length<3) continue;
-    const name=clean(p[0]); const qty=int(p[1]); const price=parseMoney(p[2]);
-    if(!name||!qty||price<0) continue;
-    const cat = auto ? autoCategory(name) : dest;
-    if(!catObj[cat]) catObj[cat]=[];
-    let it = (catObj[cat]||[]).find(x=>x.name===name);
-    if(!it){ it={name,tiers:[]}; catObj[cat].push(it); }
-    it.tiers = it.tiers || [];
-    const ex = it.tiers.find(t=>t.qty===qty);
-    if(ex) ex.price=price; else it.tiers.push({qty,price});
-    it.tiers.sort((a,b)=>a.qty-b.qty);
-    delete it.unit;
+async function persist(bump=false){
+  try{
+    if(bump) REV = Date.now();
+    saveCache();
+    setBadge("Guardando…");
+    await setDoc(docRef, { catalog: CAT, rev: REV, updatedAt: serverTimestamp() }, { merge:true });
+    setBadge("Sincronizado ✓");
+  }catch(e){
+    console.warn(e);
+    setBadge("Offline (guardado local)");
   }
 }
-$("#btnBulk").addEventListener("click",async ()=>{
-  const txt=$("#bulk_text").value;
-  const auto=$("#bulk_autocat").checked;
-  const dest=clean($("#bulk_cat").value)||"Catálogo";
-  bulkInto(CAT,txt,{auto,dest});
-  await persist();
-});
 
-/* ===== Seed (catálogo) ===== */
+/* ===== Seed ===== */
 const SEED = `
-/* --- SELLOS (actualizados) + CAJAS TRODAT --- */
 SELLOS AUTOMATICOS 4911	1	55000
 SELLOS AUTOMATICOS 4912	1	60000
 SELLOS AUTOMATICOS 4913	1	65000
@@ -445,13 +418,13 @@ SELLO AUTOMATICO FECHERO S-542D	1	90000
 CAJA DE SELLO TRODAT 4911	1	21000
 CAJA DE SELLO TRODAT 4912	1	24200
 CAJA DE SELLO TRODAT 4913	1	28300
-/* --- STICKERS --- */
+
 STICKER LAMINADO TROQUELADO 5X5	1000	178000
 STICKER SIN LAMINAR TROQUELADO 5X5	1000	136000
 STICKER LAMINADO TROQUELADO 7X7	1000	342000
 STICKER SIN LAMINAR TROQUELADO 5X5	1000	260000
 STICKERS 4X4	100	40000
-/* --- TALONARIOS (completos) --- */
+
 TALONARIO 1/2 CARTA UNA COPIA QUIMICO	1	40000
 TALONARIO 1/2 CARTA UNA COPIA QUIMICO	2	50000
 TALONARIO 1/2 CARTA ORIGINAL Y DOS COPIAS QUIMICO	2	60000
@@ -538,7 +511,7 @@ TALONARIO LORD 12.5 X 17.5 SOLO ORIGINAL	20	147000
 TALONARIO X 100 HOJAS ORIGINAL	5	55000
 TALONARIO 1/8 DE OFICIO EN BOND	50	280000
 TALONARIO 1/8 DE OFICIO EN BOND	100	220000
-/* --- OTRAS CATEGORÍAS (resumen) --- */
+
 VASO MUGS	1	18000
 GOMA SELLO	1	15000
 CARTA MENÚ	10	18000
@@ -575,6 +548,8 @@ PENDON DE 1,00 mts X 2,00 mts	1	135000
 PENDON DE 70X50	1	50000
 PENDON DE 70X100	1	60000
 PENDON DE 2,00 MTS X 2,00 MTS	1	292000
+LONA O BANNER SIN LAMINAR	1	5
+LONA BANNER  SIN LAMINAR CON INSTALACION	1	660
 BOLETAS FULL COLOR	1000	350000
 BOLETA FULL COLOR EN CARTULINA DE 7 X 16	200	60000
 BOLETAS FULL COLOR EN CARTULINA O PROPALCOTE	100	60000
@@ -586,92 +561,126 @@ BOTONES	1	5000
 IMPRESIÓN EN BOND TAMAÑO CARTA 1X0 SIN ENGOMAR, SIN NUMERAR	1	80000
 VALLA DE 12 X 4 INSTALADA	1	8500000
 BACKING CON OJALES DE 300 X 200 (6,6)	1	396000
+LONA BANNER LAMINADO INSTALADO	1	750
 ADHESIVO 80X40 SIN LAMINAR	1	25000
+PENDON DE 2,00 MTS X 2,00 MTS	1	292000
 ADHESIVO PLASTICO DE 6 CM X 6 CM	1000	180000
+TIJERA/ROMPE TRAFICO con luces	1	3900
+SELLO CON FECHADOR	1	70000
+ADHESIVO TAMAÑO CARTA FULL COLOR	1000	725
+TABLAS DE PRECIO	1	15000
+CARNET PVC UN SOLO LADO 5,4x8,5	1	6500
+CARNET PVC 4X1	1	8500
+CARNET PVC 4X4 FULL COLOR AMBOS LADOS	1	10000
+CARNET EN TESLI UN LADO	1	3500
+CARNET EN TESLI 4*1	1	4000
+CARNETEN TESLI 4*4	1	5000
+ABANICO EN CARTON DISEÑO AMBOS LADOS	1000	1050000
+BOLETAS EN PAPEL BOND	500	0
+BOLETAS EN PAPEL PROPALCOTE	500	0
 PENDON CON ARAÑA MEDIDA 1METRO X 2 METROS	1	280000
 AGENDAS TAMAÑO CARTA 22X28	1	90000
+AGENDAS TAMAÑO 22 x24	1	60000
+AGENDAS TAMAÑO 22 x25	5	250000
+AGENDAS TAMAÑO 22 x26	10	450000
+AGENDAS TAMAÑO 1/2 CARTA	1	35000
+AGENDAS TAMAÑO 1/2 CARTA	5	150000
+AGENDAS TAMAÑO 1/2 CARTA	10	280000
+PENDÓN CON ROLL UP 100x200metros	1	350000
 VOLANTES 1/4 CARTA BLANCO Y NEGRO	3000	85000
 VOLANTES 1/4 CARTA FULL COLOR 4X4	3000	270000
+TARJETAS 7,5X13,5 EN CARTULINA	2000	0
+LLAVEROS	1	5000
 VOLANTES 4X0 PRECIO FINAL	500	120000
 AGENDA TAMAÑO CARTA	1	90000
 SELLO EN MADERA	1	45000
 PASTELITOS	1000	100000
 `;
 
-/* ===== Persistencia (Firestore + localStorage) ===== */
-async function persist(){
-  try{
-    await setDoc(docRef,{cat:CAT, updatedAt:serverTimestamp(), version:1},{merge:true});
-    localStorage.setItem(LSK, JSON.stringify(CAT));
-    setBadge("Sincronizado en la nube");
-  }catch(e){
-    // Fallback: guardar local y avisar
-    localStorage.setItem(LSK, JSON.stringify(CAT));
-    setBadge("Guardado local (sin conexión a nube)");
-    console.warn("No se pudo guardar en Firestore:", e);
+/* ===== Carga inicial (rápida) ===== */
+function fromSeedToCat(seed){
+  const lines=seed.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const cat={};
+  for(const ln of lines){
+    const p=ln.split(/\t+/);
+    if(p.length<3) continue;
+    const name=clean(p[0]); const qty=int(p[1]); const price=int(p[2]);
+    const c=autoCategory(name);
+    if(!cat[c]) cat[c]=[];
+    let it=(cat[c]||[]).find(x=>x.name===name);
+    if(!it){ it={name,tiers:[]}; cat[c].push(it); }
+    it.tiers.push({qty,price});
   }
-}
-function applyCAT(newCat){
-  CAT = newCat || {};
-  rebuildIndex();
-  fillCats(); fillProducts(); setHint(); renderTable();
-}
-
-/* ===== Carga inicial ===== */
-async function firstLoad(){
-  try{
-    const snap=await getDoc(docRef);
-    if(snap.exists()){
-      applyCAT(snap.data().cat || {});
-      setBadge("Conectado (lectura en vivo)");
-    }else{
-      // crear desde SEED
-      let seedObj={};
-      bulkInto(seedObj, SEED, {auto:true});
-      CAT = seedObj;
-      await persist(); // crea documento
-      applyCAT(CAT);
-      setBadge("Catálogo creado en la nube");
-    }
-    // suscripción en tiempo real
-    onSnapshot(docRef,(d)=>{
-      if(!d.exists()) return;
-      const cloudCat=d.data().cat || {};
-      if(JSON.stringify(cloudCat)===JSON.stringify(CAT)) return;
-      CAT=cloudCat; applyCAT(CAT);
-      setBadge("Actualizado (en vivo)");
+  Object.keys(cat).forEach(k=>{
+    cat[k].forEach(it=>{
+      it.tiers?.sort((a,b)=>a.qty-b.qty);
     });
-  }catch(e){
-    console.warn("Fallo Firestore, usando cache/local:", e);
-    const cache = localStorage.getItem(LSK);
-    if(cache){
-      applyCAT(JSON.parse(cache));
-      setBadge("Modo local (cache)");
-    }else{
-      // última opción: seed local
-      let seedObj={};
-      bulkInto(seedObj, SEED, {auto:true});
-      CAT = seedObj;
-      localStorage.setItem(LSK, JSON.stringify(CAT));
-      applyCAT(CAT);
-      setBadge("Inicializado local (sin nube)");
-    }
+  });
+  return cat;
+}
+function loadCacheFast(){
+  const raw=localStorage.getItem(CACHE);
+  if(raw){
+    try{
+      CAT=JSON.parse(raw)||{};
+      applyAndRender();
+      setBadge("Cache ✓");
+      return true;
+    }catch{}
   }
+  // si no hay cache, usa seed para mostrar algo inmediato
+  CAT = fromSeedToCat(SEED);
+  REV = Date.now();
+  applyAndRender();
+  setBadge("Seed ✓");
+  return false;
 }
 
-/* ===== Eventos generales ===== */
-function initUI(){
-  fillCats(); fillProducts(); setHint(); renderTable();
+/* ===== Suscripción Firestore (refresca sin pisar cambios locales recientes) ===== */
+async function subscribeFirestore(){
+  try{
+    const snap = await getDoc(docRef);
+    if(!snap.exists()){
+      // sube lo que tengas (seed/cache) como primera versión
+      await persist(true);
+    }
+  }catch(e){ console.warn(e); }
+
+  onSnapshot(docRef, (ds)=>{
+    const data = ds.data();
+    if(!data || !data.catalog) return;
+    // solo actualizar si la versión remota es más nueva
+    if(Number(data.rev||0) > REV){
+      CAT = data.catalog;
+      REV = Number(data.rev||0);
+      saveCache();
+      applyAndRender();
+      setBadge("En vivo ✓");
+    }
+  }, (err)=>{ console.warn(err); setBadge("Offline (cache)"); });
 }
+
+/* ===== Eventos UI ===== */
 $("#btnCalcular").addEventListener("click",calcular);
 $("#btnPrint").addEventListener("click",()=>window.print());
 $("#categoria").addEventListener("change",()=>{fillProducts();setHint();renderTable();});
 $("#producto").addEventListener("change",setHint);
+$("#btnAgregar").addEventListener("click",agregar);
+$("#btnLimpiar").addEventListener("click",()=>{
+  $("#g_cat").value=""; $("#g_name").value="";
+  $("#g_tipo").value="tier";
+  $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1; $("#g_qty").value="1000";
+  $("#g_price").value="0";
+});
+$("#g_tipo").addEventListener("change",()=>{
+  const isU=$("#g_tipo").value==="unit";
+  $("#g_qty").disabled=isU;
+  $("#g_qty_wrap").style.opacity = isU ? 0.35 : 1;
+});
 
-/* run */
-await firstLoad();
-initUI();
+/* ===== Go! ===== */
+loadCacheFast();   // vista inmediata
+subscribeFirestore(); // y luego sincroniza
 </script>
 </body>
 </html>
-
