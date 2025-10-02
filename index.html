@@ -2,24 +2,24 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Uragráfica — Cotizador</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}
-  body{background:#f4f6f8;color:#111;line-height:1.45;font-size:15px}
-  .wrap{max-width:1100px;margin:16px auto;padding:0 14px}
-  .topbar{background:#1f73c3;color:#fff;padding:10px 14px;border-bottom:3px solid #135ca7}
-  .topbar .bar{display:flex;justify-content:space-between;align-items:center}
+  body{background:#f5f7fa;color:#111;font-size:15px;line-height:1.45}
+  .wrap{max-width:1100px;margin:18px auto;padding:0 14px}
+  .top{background:#1f73c3;color:#fff;border-bottom:3px solid #135ca7}
+  .top .bar{max-width:1100px;margin:0 auto;padding:10px 14px;display:flex;justify-content:space-between;align-items:center}
   .logo{font-weight:800}
-  h1{margin-top:6px;font-size:20px;font-weight:800;text-align:center}
-  .actions{display:flex;gap:8px;align-items:center}
+  .actions{display:flex;gap:8px}
   button{cursor:pointer}
-  .primary{background:#2ecc71;color:#fff;border:none;border-radius:8px;padding:8px 12px}
-  .secondary{background:#0b57d0;color:#fff;border:none;border-radius:8px;padding:8px 12px}
+  .b1{background:#2ecc71;color:#fff;border:none;border-radius:8px;padding:8px 12px}
+  .b2{background:#0b57d0;color:#fff;border:none;border-radius:8px;padding:8px 12px}
   .ghost{background:#fff;border:1px solid #bcd0ea;color:#0b57d0;border-radius:8px;padding:8px 12px}
+  .chip{background:#eef6ff;border:1px solid #cfe2ff;color:#0b57d0;border-radius:14px;padding:2px 8px;font-size:12px}
 
   .card{background:#fff;border:1px solid #e3e9ef;border-radius:12px;padding:14px;margin:12px 0;box-shadow:0 2px 10px rgba(0,0,0,.04)}
-  .card h2{margin-bottom:8px;color:#0f2b46;font-size:18px}
+  .card h2{color:#0f2b46;font-size:18px;margin-bottom:8px}
 
   .grid{display:grid;gap:10px}
   .g4{grid-template-columns:repeat(4,1fr)}
@@ -29,38 +29,34 @@
   input,select,textarea{margin-top:6px;padding:10px;border:1px solid #c8d2dc;border-radius:8px;background:#f9fbfc}
   textarea{min-height:120px;resize:vertical}
   input:focus,select:focus,textarea:focus{outline:none;border-color:#1f73c3;background:#fff}
-
   .muted{font-size:12px;color:#6a7d90;margin-top:6px}
+
   .detalle{min-height:64px;border:1px dashed #c9d3dd;border-radius:10px;padding:10px;background:#fbfdff}
-  .money{font-weight:800}
-  .money.total{color:#e53935;font-size:18px}
   .row{display:flex;justify-content:space-between;margin:4px 0}
+  .money{font-weight:800}
+  .total{color:#e53935;font-size:18px}
 
-  .tabla-cat{margin-top:8px;border:1px solid #e4e9ef;border-radius:10px;overflow:hidden}
-  .tabla-cat table{width:100%;border-collapse:collapse}
-  .tabla-cat th,.tabla-cat td{padding:8px;border-top:1px solid #eef2f6;font-size:13px}
-  .tabla-cat thead th{background:#f7fafc;text-align:left;color:#274664}
-  .chip{background:#eef6ff;border:1px solid #cfe2ff;padding:0 8px;border-radius:12px;font-size:12px}
-
-  .del{background:#ffebee;border:1px solid #ffcdd2;color:#c62828;padding:6px 10px;border-radius:8px;cursor:pointer}
+  .tabla{margin-top:8px;border:1px solid #e4e9ef;border-radius:10px;overflow:hidden}
+  .tabla table{width:100%;border-collapse:collapse}
+  .tabla th,.tabla td{padding:8px;border-top:1px solid #eef2f6;font-size:13px}
+  .tabla thead th{background:#f7fafc;text-align:left;color:#274664}
   .edit{background:#e8f5e9;border:1px solid #c8e6c9;color:#1b5e20;padding:6px 10px;border-radius:8px;cursor:pointer;margin-right:6px}
+  .del{background:#ffebee;border:1px solid #ffcdd2;color:#c62828;padding:6px 10px;border-radius:8px;cursor:pointer}
 
-  .mt8{margin-top:8px}
   .print{display:none}
-  @media print{.topbar,.card:not(.print){display:none!important}.print{display:block;border:none;box-shadow:none}}
+  @media print{.top,.card:not(.print){display:none!important}.print{display:block;border:none;box-shadow:none}}
 </style>
 </head>
 <body>
-<header class="topbar">
+<header class="top">
   <div class="bar">
     <div class="logo">Uragráfica</div>
     <div class="actions">
-      <span id="syncBadge" class="chip">Cargando…</span>
-      <button id="btnCalcular" class="primary">Calcular</button>
-      <button id="btnPrint" class="secondary">Imprimir / PDF</button>
+      <span id="badge" class="chip">Cargando…</span>
+      <button id="btnCalcular" class="b1">Calcular</button>
+      <button id="btnPrint" class="b2">Imprimir / PDF</button>
     </div>
   </div>
-  <h1>Cotizador</h1>
 </header>
 
 <main class="wrap">
@@ -69,10 +65,10 @@
     <h2>Selecciona</h2>
     <div class="grid g4">
       <label>Categoría *
-        <select id="categoria"><option>Cargando…</option></select>
+        <select id="categoria"></select>
       </label>
       <label>Producto *
-        <select id="producto"><option>—</option></select>
+        <select id="producto"></select>
       </label>
       <label>Cantidad *
         <input id="cantidad" type="number" min="1" value="1000"/>
@@ -91,7 +87,7 @@
   <section class="card">
     <h2>Detalle</h2>
     <div id="detalle" class="detalle">Presiona “Calcular”.</div>
-    <div class="grid g3 mt8">
+    <div class="grid g3" style="margin-top:8px">
       <div>
         <div class="muted">Subtotal + IVA</div>
         <div id="subProd" class="money">—</div>
@@ -126,20 +122,20 @@
       </label>
     </div>
 
-    <div class="grid g3 mt8">
+    <div class="grid g3" style="margin-top:8px">
       <label>Precio (COP)
         <input id="g_price" type="number" min="0" value="0"/>
       </label>
       <div style="display:flex;gap:8px;align-items:end">
-        <button id="btnAgregar" class="primary">Agregar / Actualizar</button>
-        <button id="btnLimpiar" class="ghost">Limpiar formulario</button>
+        <button id="btnAgregar" class="b1">Agregar / Actualizar</button>
+        <button id="btnLimpiar" class="ghost">Limpiar</button>
       </div>
     </div>
 
-    <div class="mt8">
+    <div style="margin-top:8px">
       <details>
-        <summary><b>Importación masiva</b> (pega: <i>Nombre [tab] Cantidad [tab] Precio</i>)</summary>
-        <div class="mt8 grid g4">
+        <summary><b>Importación masiva</b> — pega líneas <i>Nombre [tab] Cantidad [tab] Precio</i></summary>
+        <div class="grid g4" style="margin-top:8px">
           <label>Destino (si no auto)
             <input id="bulk_cat" placeholder="p.ej. Talonarios" value="Talonarios"/>
           </label>
@@ -152,62 +148,63 @@
 STICKER LAMINADO TROQUELADO 5X5	1000	178000
 ADHESIVO 80X40 SIN LAMINAR	1	25000
 ..."></textarea>
-        <div class="mt8" style="display:flex;gap:8px">
+        <div style="margin-top:8px;display:flex;gap:8px">
           <button id="btnBulk" class="ghost">Cargar líneas</button>
-          <span class="muted">Líneas iguales se agrupan como tiers.</span>
+          <span class="muted">Las líneas iguales se agrupan como tiers. Si Firestore está activo, se sincroniza en vivo.</span>
         </div>
       </details>
     </div>
 
-    <div class="mt8">
-      <div class="muted">Ítems de la categoría seleccionada:</div>
-      <div id="tablaCat" class="tabla-cat"></div>
-    </div>
+    <div class="tabla" id="tablaCat" style="margin-top:8px"></div>
   </section>
 
-  <!-- Vista impresión -->
+  <!-- Print -->
   <section class="card print">
     <h2>COTIZACIÓN</h2>
     <div id="pv"></div>
   </section>
 </main>
 
-<!-- Firebase + App -->
+<!-- Firebase (opcional) -->
 <script type="module">
+/* ============ FIREBASE MODULAR con caché persistente ============ */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot,
-  serverTimestamp, query, orderBy, getDocs, limit, writeBatch
+  getFirestore, initializeFirestore,
+  persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, query, where, orderBy, onSnapshot, getDocs, getDoc,
+  setDoc, deleteDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-/* ⚠️ CONFIGURA ESTO CON TU PROYECTO */
+/* —— PON TUS CREDENCIALES AQUÍ para sincronizar —— */
 const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "TU_AUTH_DOMAIN",
-  projectId: "TU_PROJECT_ID",
-  storageBucket: "TU_BUCKET",
-  messagingSenderId: "TU_SENDER_ID",
-  appId: "TU_APP_ID"
+  apiKey: "",           // si lo dejas vacío: modo local (sin Firestore)
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
 };
+const FIREBASE = !!firebaseConfig.projectId;
 
-let db=null;
-try{
-  const app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-}catch(e){
-  console.warn("Firebase no inicializado (seguiré local):", e);
-}
-
-/* ====== util ====== */
+let app = null, db = null;
 const $=s=>document.querySelector(s);
+const badge=$("#badge");
 const fmt=new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
 const money=v=>fmt.format(Math.round(v||0));
 const int=n=>Math.max(0,parseInt(n||0,10));
 const clean=s=>(s||"").toString().trim();
-const BADGE=$("#syncBadge");
-function setBadge(t){ BADGE.textContent=t; }
 
-/* ====== categorización ====== */
+/* ========= Estado local ========= */
+const STORAGE="uragrafica_cat_v11";
+const SEED_FLAG_LOCAL="seed_local_v11";
+const PUSHED_REMOTE="pushed_remote_v11";
+let CAT = {};                // { cat: [ items ] }
+let INDEX = {};              // acceso rápido por cat+name
+let unsubItems = null;       // listener de items por categoría
+let CATS = new Set();        // lista de categorías
+
+/* ===== Categorización (STICKERS ≠ ADHESIVOS) ===== */
 function autoCategory(name){
   const s=(name||"").toUpperCase();
   if (/(^|\s)STI?C?K?KER(S)?\b|(^|\s)STIKER(S)?\b|PEGATINA(S)?\b|CALCOMANI(A|AS)\b/.test(s)) return "Stickers";
@@ -228,36 +225,42 @@ function autoCategory(name){
   if(/LLAVEROS|LAPICERO|BOTONES|MANILLAS|ABANICO|PASTELITOS|PORTAFOLIOS/.test(s)) return "Promocionales";
   if(/LAMINA|OPAL|TABLAS\s+DE\s+PRECIO/.test(s)) return "Materiales";
   if(/CORTE DE PAPEL|TIJERA|ROMPE\s*TRAFICO/.test(s)) return "Servicios";
-  if(/IMPRESIÓN|IMPRESION/.test(s)) return "Impresión";
+  if(/IMPRESI(Ó|O)N/.test(s)) return "Impresión";
   return "Otros";
 }
 
-/* ====== estado ====== */
-let CAT={};    // {categoria: [items]}
-let INDEX={};  // {categoria:{name:item}}
-const CACHE="uragrafica_cache_v6";   // ← bump: ignora caches viejas vacías
-
-/* ====== UI ====== */
+/* ===== util ===== */
+function ensureCat(cat){ if(!CAT[cat]) CAT[cat]=[]; }
 function rebuildIndex(){
   INDEX={};
   Object.keys(CAT).forEach(k=>{
     INDEX[k]={};
-    (CAT[k]||[]).forEach(it=>INDEX[k][it.name]=it);
+    CAT[k].forEach(it=>INDEX[k][it.name]=it);
   });
 }
+function persist(){ try{ localStorage.setItem(STORAGE, JSON.stringify(CAT)); }catch{} }
+function loadLocal(){
+  try{ CAT = JSON.parse(localStorage.getItem(STORAGE)) || {}; }
+  catch{ CAT = {}; }
+  Object.keys(CAT).forEach(c=>CAT[c].forEach(()=>CATS.add(c)));
+  rebuildIndex();
+}
+
+/* ===== UI ===== */
 function fillCats(){
-  const sel=$("#categoria"); const keep=sel.value; sel.innerHTML="";
-  Object.keys(CAT).sort().forEach(c=>{
+  const sel=$("#categoria"); sel.innerHTML="";
+  [...Object.keys(CAT)].sort().forEach(c=>{
     const o=document.createElement("option"); o.value=o.textContent=c; sel.appendChild(o);
   });
-  if(keep && CAT[keep]) sel.value=keep; else sel.selectedIndex=0;
 }
 function fillProducts(){
-  const cat=$("#categoria").value; const sel=$("#producto"); const keep=sel.value; sel.innerHTML="";
+  const cat=$("#categoria").value; const sel=$("#producto"); sel.innerHTML="";
   (CAT[cat]||[]).map(x=>x.name).sort().forEach(n=>{
     const o=document.createElement("option"); o.value=o.textContent=n; sel.appendChild(o);
   });
-  if((CAT[cat]||[]).some(x=>x.name===keep)) sel.value=keep; else sel.selectedIndex=0;
+  setHint();
+  renderTable();
+  listenCategory(cat); // <-- solo escuchamos esta categoría (rápido)
 }
 function setHint(){
   const cat=$("#categoria").value, name=$("#producto").value;
@@ -265,98 +268,39 @@ function setHint(){
   if(!it){ el.textContent="—"; return; }
   if(it.unit) el.textContent=`Unitario: ${money(it.unit)} × cantidad.`;
   else if(it.tiers?.length){
-    const txt=it.tiers.map(t=>`${t.qty} → ${money(t.price)}`).slice(0,8).join(" · ");
-    el.textContent=`Tirajes: ${txt}${it.tiers.length>8?" …":""}`;
-  } else el.textContent="Ítem sin precio.";
-}
-function renderTable(){
-  const cat=$("#categoria").value; const cont=$("#tablaCat"); const arr=CAT[cat]||[];
-  if(!arr.length){ cont.innerHTML="<div class='muted' style='padding:8px'>No hay items.</div>"; return; }
-  const rows=arr.map((it)=>{
-    const tipo=it.unit?`<span class="chip">Unitario</span>`:`<span class="chip">Por cantidad</span>`;
-    const val = it.unit? money(it.unit) : it.tiers.map(t=>`${t.qty}→${money(t.price)}`).join(" · ");
-    return `<tr>
-      <td>${it.name}</td>
-      <td>${tipo}</td>
-      <td>${val||"-"}</td>
-      <td style="text-align:right">
-        <button class="edit" data-name="${encodeURIComponent(it.name)}">Editar</button>
-        <button class="del" data-name="${encodeURIComponent(it.name)}">Eliminar</button>
-      </td>
-    </tr>`;
-  }).join("");
-  cont.innerHTML=`<table>
-    <thead><tr><th>Producto</th><th>Tipo</th><th>Precio / Tiers</th><th></th></tr></thead>
-    <tbody>${rows}</tbody></table>`;
-
-  cont.querySelectorAll(".del").forEach(b=>{
-    b.addEventListener("click",async ()=>{
-      const cat=$("#categoria").value;
-      const name=decodeURIComponent(b.dataset.name);
-      if(!confirm(`¿Eliminar “${name}”?`)) return;
-      if(!db){ alert("Sin Firestore. Revisa la config."); return; }
-      await deleteDoc(doc(db,"catalog",encodeURIComponent(`${cat}:::${name}`)));
-      setBadge("Eliminado ✓");
-    });
-  });
-  cont.querySelectorAll(".edit").forEach(b=>{
-    b.addEventListener("click",()=>{
-      const cat=$("#categoria").value;
-      const name=decodeURIComponent(b.dataset.name);
-      const it=(CAT[cat]||[]).find(x=>x.name===name);
-      $("#g_cat").value=cat;
-      $("#g_name").value=it.name;
-      if(it.unit){
-        $("#g_tipo").value="unit";
-        $("#g_qty").disabled=true; $("#g_qty_wrap").style.opacity=0.35;
-        $("#g_price").value=it.unit;
-      }else{
-        $("#g_tipo").value="tier";
-        $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1;
-        const first=it.tiers[0]||{qty:1000,price:0};
-        $("#g_qty").value=first.qty;
-        $("#g_price").value=first.price;
-        alert("Edita precio/cantidad y pulsa “Agregar / Actualizar”. Cambia cantidad para añadir otro tier.");
-      }
-      window.scrollTo({top:0,behavior:"smooth"});
-    });
-  });
-}
-function applyAndRender(){
-  try{ localStorage.setItem(CACHE, JSON.stringify(CAT)); }catch{}
-  rebuildIndex(); fillCats(); fillProducts(); setHint(); renderTable();
+    const txt=it.tiers.map(t=>`${t.qty} → ${money(t.price)}`).slice(0,6).join(" · ");
+    el.textContent=`Tirajes: ${txt}${it.tiers.length>6?" …":""}`;
+  }else el.textContent="Ítem sin precio.";
 }
 
-/* ====== cálculo ====== */
+/* ===== Cálculo ===== */
 function priceByQty(it,qty){
-  if(!it) return {base:0};
-  if(it.unit && !(it.tiers?.length)) return {base:it.unit*qty};
+  if(!it) return 0;
+  if(it.unit && !(it.tiers?.length)) return it.unit * qty;
   if(it.tiers?.length){
     const tiers=[...it.tiers].sort((a,b)=>a.qty-b.qty);
     const exact=tiers.find(t=>t.qty===qty);
-    if(exact) return {base:exact.price};
-    let lower=null, higher=null;
-    for(const t of tiers){ if(t.qty<=qty) lower=t; if(t.qty>=qty){ higher=t; break; } }
-    const chosen = lower || higher || tiers[0];
-    const unit   = chosen.price / chosen.qty;
-    return {base:unit*qty};
+    if(exact) return exact.price;
+    const sup=tiers.find(t=>t.qty>=qty) || tiers[tiers.length-1];
+    const unit=sup.price/sup.qty;
+    return unit*qty; // prorrateo interno (no mostramos texto)
   }
-  return {base:0};
+  return 0;
 }
 function calcular(){
   const cat=$("#categoria").value, name=$("#producto").value, qty=int($("#cantidad").value);
   const incIVA=$("#incluirIVA").checked;
   const it=(INDEX[cat]||{})[name];
-  const {base}=priceByQty(it,qty);
-  const subtotal=base, iva=incIVA?subtotal*0.19:0, total=subtotal+iva;
+  const subtotal=priceByQty(it,qty);
+  const iva=incIVA?subtotal*0.19:0;
+  const total=subtotal+iva;
 
   $("#detalle").innerHTML = `
-    <div class="row"><div>${name}</div><div class="money">${money(base)}</div></div>
+    <div class="row"><div>${name}</div><div class="money">${money(subtotal)}</div></div>
     <hr style="border:none;border-top:1px dashed #c9d3dd;margin:6px 0;">
     <div class="row"><span>IVA ${incIVA?"(19%)":"(no incluido)"}</span><strong>${money(iva)}</strong></div>`;
   $("#subProd").textContent=money(subtotal+iva);
   $("#total").textContent=money(total);
-
   $("#pv").innerHTML=`
     <div class="row"><strong>Producto:</strong><span>${name}</span></div>
     <div class="row"><strong>Categoría:</strong><span>${cat}</span></div>
@@ -366,8 +310,172 @@ function calcular(){
     <div class="row"><strong>TOTAL:</strong><span>${money(total)}</span></div>`;
 }
 
-/* ====== SEED (tu catálogo actualizado) ====== */
-const SEED = `SELLOS AUTOMATICOS 4911	1	55000
+/* ===== Render tabla cat ===== */
+function renderTable(){
+  const cat=$("#categoria").value; const cont=$("#tablaCat"); const arr=CAT[cat]||[];
+  if(!arr.length){ cont.innerHTML="<div class='muted' style='padding:8px'>No hay ítems.</div>"; return; }
+  const rows=arr.map((it,i)=>{
+    const tipo=it.unit?`<span class="chip">Unitario</span>`:`<span class="chip">Por cantidad</span>`;
+    const val = it.unit? money(it.unit) : it.tiers.map(t=>`${t.qty}→${money(t.price)}`).join(" · ");
+    return `<tr>
+      <td>${it.name}</td><td>${tipo}</td><td>${val||"-"}</td>
+      <td style="text-align:right">
+        <button class="edit" data-i="${i}">Editar</button>
+        <button class="del" data-i="${i}">Eliminar</button>
+      </td>
+    </tr>`;
+  }).join("");
+  cont.innerHTML=`<table>
+    <thead><tr><th>Producto</th><th>Tipo</th><th>Precio / Tiers</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+
+  cont.querySelectorAll(".del").forEach(b=>{
+    b.addEventListener("click",async ()=>{
+      const i=parseInt(b.dataset.i,10);
+      const it=(CAT[cat]||[])[i];
+      if(!confirm("¿Seguro que quieres eliminar este ítem del catálogo?")) return;
+      // UI optimista:
+      CAT[cat].splice(i,1); rebuildIndex(); persist(); renderTable(); fillProducts();
+      if(FIREBASE){ const id=docId(cat,it.name); await deleteDoc(doc(db,"items",id)).catch(()=>{}); }
+    });
+  });
+  cont.querySelectorAll(".edit").forEach(b=>{
+    b.addEventListener("click",()=>{
+      const i=parseInt(b.dataset.i,10);
+      const it=(CAT[cat]||[])[i];
+      $("#g_cat").value=cat; $("#g_name").value=it.name;
+      if(it.unit){
+        $("#g_tipo").value="unit"; $("#g_qty").disabled=true; $("#g_qty_wrap").style.opacity=.35;
+        $("#g_price").value=it.unit;
+      }else{
+        $("#g_tipo").value="tier"; $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1;
+        const first=it.tiers[0]||{qty:1000,price:0};
+        $("#g_qty").value=first.qty; $("#g_price").value=first.price;
+        alert("Edita precio/cantidad y pulsa “Agregar / Actualizar”. Cambia cantidad para añadir otro tier.");
+      }
+      window.scrollTo({top:0,behavior:"smooth"});
+    });
+  });
+}
+
+/* ===== Gestión ===== */
+function findItem(cat,name){ return (CAT[cat]||[]).find(x=>x.name===name); }
+function upsertUnit(cat,name,price){
+  ensureCat(cat);
+  let it=findItem(cat,name);
+  if(!it){ it={cat,name,unit:price}; CAT[cat].push(it); }
+  else { it.unit=price; delete it.tiers; }
+}
+function upsertTier(cat,name,qty,price){
+  ensureCat(cat);
+  let it=findItem(cat,name);
+  if(!it){ it={cat,name,tiers:[]}; CAT[cat].push(it); }
+  it.tiers=it.tiers||[];
+  const ex=it.tiers.find(t=>t.qty===qty);
+  if(ex) ex.price=price; else it.tiers.push({qty,price});
+  it.tiers.sort((a,b)=>a.qty-b.qty); delete it.unit;
+}
+async function agregar(){
+  const cat = clean($("#g_cat").value) || $("#categoria").value || "Catálogo";
+  const name= clean($("#g_name").value);
+  const tipo=$("#g_tipo").value;
+  const qty = int($("#g_qty").value);
+  const price = int($("#g_price").value);
+  if(!cat || !name || (tipo==="tier" && (!qty||!price)) || (tipo==="unit" && !price)){
+    alert("Completa categoría, producto y precio (y cantidad si es por tier)."); return;
+  }
+  // UI optimista
+  if(tipo==="unit") upsertUnit(cat,name,price); else upsertTier(cat,name,qty,price);
+  CATS.add(cat); rebuildIndex(); persist(); fillCats(); $("#categoria").value=cat; fillProducts(); renderTable();
+
+  // remoto
+  if(FIREBASE){
+    const id=docId(cat,name);
+    const body = (tipo==="unit")
+      ? {cat,name,nameUpper:name.toUpperCase(),type:"unit",unit:price,tiers:[],updatedAt:serverTimestamp()}
+      : {cat,name,nameUpper:name.toUpperCase(),type:"tier",unit:null,tiers:(findItem(cat,name).tiers||[]),updatedAt:serverTimestamp()};
+    await setDoc(doc(db,"items",id), body, {merge:true}).catch(()=>{});
+    await setDoc(doc(db,"cats",cat), {name:cat}, {merge:true}).catch(()=>{});
+  }
+  $("#g_name").value=""; $("#g_price").value="0"; $("#g_qty").value="1000";
+}
+function clearForm(){
+  $("#g_cat").value=""; $("#g_name").value="";
+  $("#g_tipo").value="tier"; $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1; $("#g_qty").value="1000";
+  $("#g_price").value="0";
+}
+function parseMoney(s){
+  s=(s||"").toString().trim();
+  s=s.replace(/[^\d,\.]/g,"");
+  if(/^\d+,\d+$/.test(s)) s=s.replace(",","");
+  s=s.replace(/\./g,"").replace(/,/g,"");
+  const v=parseInt(s||"0",10);
+  return isFinite(v)?v:0;
+}
+function bulkImport(txt,{auto=true,dest="Catálogo"}={}){
+  const lines=(txt||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  for(const ln of lines){
+    const p=ln.split(/\t+/);
+    if(p.length<3) continue;
+    const name=clean(p[0]); const qty=int(p[1]); const price=parseMoney(p[2]);
+    if(!name||!qty||price<0) continue;
+    const cat = auto ? autoCategory(name) : dest;
+    upsertTier(cat,name,qty,price);
+    if(FIREBASE){
+      const id=docId(cat,name);
+      const tiers=(findItem(cat,name).tiers||[]);
+      setDoc(doc(db,"items",id), {cat,name,nameUpper:name.toUpperCase(),type:"tier",tiers,unit:null,updatedAt:serverTimestamp()}, {merge:true}).catch(()=>{});
+      setDoc(doc(db,"cats",cat), {name:cat}, {merge:true}).catch(()=>{});
+    }
+  }
+  rebuildIndex(); persist(); fillCats(); renderTable(); fillProducts();
+}
+
+/* ===== Firestore ===== */
+function docId(cat,name){ return `${cat}__${name}`.replace(/[\/#?[\]]/g,"_"); }
+function initFirestore(){
+  try{
+    app = initializeApp(firebaseConfig);
+    // caché persistente + multi-tab (latencia bajísima y actualiza en memoria)
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    });
+    badge.textContent="Online (caché)";
+  }catch(e){
+    console.warn(e); db=null; badge.textContent="Solo local";
+  }
+}
+async function listenCats(){
+  if(!FIREBASE||!db) return;
+  const snap = await getDocs(collection(db,"cats")).catch(()=>null);
+  if(snap){ snap.forEach(d=>CATS.add(d.id)); }
+  // poblar select rápido:
+  ensureLocalSeed();
+  fillCats(); if(!$("#categoria").value) $("#categoria").selectedIndex=0; fillProducts();
+}
+function listenCategory(cat){
+  if(!FIREBASE||!db) return;
+  if(unsubItems) try{unsubItems();}catch{}
+  const q=query(collection(db,"items"), where("cat","==",cat), orderBy("nameUpper"));
+  unsubItems = onSnapshot(q,{includeMetadataChanges:true},(qs)=>{
+    let changed=false;
+    const arr=[];
+    qs.forEach(d=>{
+      const x=d.data();
+      const it = (x.type==="unit") ? {cat:x.cat,name:x.name,unit:x.unit} : {cat:x.cat,name:x.name,tiers:x.tiers||[]};
+      arr.push(it);
+    });
+    CAT[cat]=arr; changed=true;
+    if(changed){
+      rebuildIndex(); persist(); fillProducts(); renderTable();
+    }
+  });
+}
+
+/* ===== Semilla ===== */
+const SEED = `
+/* --- SELLOS (precios nuevos) + CAJAS TRODAT --- */
+SELLOS AUTOMATICOS 4911	1	55000
 SELLOS AUTOMATICOS 4912	1	60000
 SELLOS AUTOMATICOS 4913	1	65000
 SELLO AUTOMATICO DE BOLSILLO	1	55000
@@ -375,11 +483,15 @@ SELLO AUTOMATICO FECHERO S-542D	1	90000
 CAJA DE SELLO TRODAT 4911	1	21000
 CAJA DE SELLO TRODAT 4912	1	24200
 CAJA DE SELLO TRODAT 4913	1	28300
+
+/* --- STICKERS --- */
 STICKER LAMINADO TROQUELADO 5X5	1000	178000
 STICKER SIN LAMINAR TROQUELADO 5X5	1000	136000
 STICKER LAMINADO TROQUELADO 7X7	1000	342000
 STICKER SIN LAMINAR TROQUELADO 5X5	1000	260000
 STICKERS 4X4	100	40000
+
+/* --- TALONARIOS (extracto; incluye todos los que nos pasaste) --- */
 TALONARIO 1/2 CARTA UNA COPIA QUIMICO	1	40000
 TALONARIO 1/2 CARTA UNA COPIA QUIMICO	2	50000
 TALONARIO 1/2 CARTA ORIGINAL Y DOS COPIAS QUIMICO	2	60000
@@ -466,11 +578,13 @@ TALONARIO LORD 12.5 X 17.5 SOLO ORIGINAL 	20	147000
 TALONARIO X 100 HOJAS ORIGINAL 	5	55000
 TALONARIO 1/8 DE OFICIO EN BOND	50	280000
 TALONARIO 1/8 DE OFICIO EN BOND	100	220000
+
+/* --- OTRAS CATEGORÍAS (volantes, tarjetas, agendas, carnets, etc.) --- */
 VASO MUGS	1	18000
 GOMA SELLO	1	15000
 CARTA MENÚ	10	18000
 CARTA MENU TAMAÑO CARTA X 6 PAGINAS DOBLES	1	36000
-AGENDAS 25 X 17.5 	1	45000
+AGENDAS 25 X 17.5	1	45000
 AGENDAS MEDIO OFICIO 23X16.5	1	35000
 CARNET EN PVC INDIVIDUAL	1	10000
 CARNET EN PVC CON PORTA CARNET	1	18000
@@ -478,8 +592,8 @@ TARJETAS DE PRESETACION BRILLO	1000	130000
 TARJETAS DE PRESETACION MATTE	1000	160000
 TARJETAS DE PRESETACION MATE Y RESERVA	1000	180000
 TARJETAS IMANTADAS	1000	400000
-TARJETAS DE PRESENTACION MATTE CON RESERVA UN LADO 	1000	143000
-TARJETAS DE PRSENTACION MATTE CON RESERVA DOS LADO 	1000	158000
+TARJETAS DE PRESENTACION MATTE CON RESERVA UN LADO	1000	143000
+TARJETAS DE PRSENTACION MATTE CON RESERVA DOS LADO	1000	158000
 TARJETAS DE PRESETACION LAMINADA	100	30000
 TARJETAS DE PRESETACION LAMINADA	500	100000
 TARJETAS DE COBRO 14 X 8	1000	70000
@@ -495,8 +609,8 @@ CORTE DE PAPEL	1	5000
 TABLERO EN ACRILICO DE 80 X 1,50 CON ADHESIVO AL ESPEJO CON BUJES	1	324000
 LAPICERO ESTAMPADO	1	4000
 LAPICERO ESTAMPADO EN PROPALCOTE	1	3000
-LAMINA OPAL SOLA 	1	8000
-PENDON DE 60X40 	1	30000
+LAMINA OPAL SOLA	1	8000
+PENDON DE 60X40	1	30000
 PENDON DE 1,00 mts X 1,20 mts	1	110000
 PENDON DE 1,00 mts X 2,00 mts	1	135000
 PENDON DE 70X50	1	50000
@@ -508,24 +622,30 @@ BOLETAS FULL COLOR	1000	350000
 BOLETA FULL COLOR EN CARTULINA DE 7 X 16	200	60000
 BOLETAS FULL COLOR EN CARTULINA O PROPALCOTE	100	60000
 ADHESIVO DE 4 CM X 4 CM SIN LAMINAR	1000	60000
-AFICHE TAMAÑO CARTA 	1	20000
+AFICHE TAMAÑO CARTA	1	20000
+BANDERINES	1	1000
+MANILLAS EN SATIN	1	1000
 BOTONES	1	5000
 IMPRESIÓN EN BOND TAMAÑO CARTA 1X0 SIN ENGOMAR, SIN NUMERAR	1	80000
 VALLA DE 12 X 4 INSTALADA	1	8500000
 BACKING CON OJALES DE 300 X 200 (6,6)	1	396000
-ADHESIVO 80X40 SIN LAMINAR 	1	25000
+LONA BANNER LAMINADO INSTALADO	1	750
+ADHESIVO 80X40 SIN LAMINAR	1	25000
 PENDON DE 2,00 MTS X 2,00 MTS	1	292000
-ADHESIVO PLASTICO DE 6 CM X 6 CM 	1000	180000
-SELLO CON FECHADOR 	1	70000
+ADHESIVO PLASTICO DE 6 CM X 6 CM	1000	180000
+TIJERA/ROMPE TRAFICO con luces	1	3900
+SELLO CON FECHADOR	1	70000
 ADHESIVO TAMAÑO CARTA FULL COLOR	1000	725
-TABLAS DE PRECIO 	1	15000
+TABLAS DE PRECIO	1	15000
 CARNET PVC UN SOLO LADO 5,4x8,5	1	6500
- CARNET PVC 4X1	1	8500
+CARNET PVC 4X1	1	8500
 CARNET PVC 4X4 FULL COLOR AMBOS LADOS	1	10000
 CARNET EN TESLI UN LADO	1	3500
 CARNET EN TESLI 4*1	1	4000
 CARNETEN TESLI 4*4	1	5000
-ABANICO EN CARTON DISEÑO AMBOS LADOS 	1000	1050000
+ABANICO EN CARTON DISEÑO AMBOS LADOS	1000	1050000
+BOLETAS EN PAPEL BOND	500	0
+BOLETAS EN PAPEL PROPALCOTE	500	0
 PENDON CON ARAÑA MEDIDA 1METRO X 2 METROS	1	280000
 AGENDAS TAMAÑO CARTA 22X28	1	90000
 AGENDAS TAMAÑO 22 x24	1	60000
@@ -540,183 +660,59 @@ VOLANTES 1/4 CARTA FULL COLOR 4X4	3000	270000
 TARJETAS 7,5X13,5 EN CARTULINA	2000	0
 LLAVEROS	1	5000
 VOLANTES 4X0 PRECIO FINAL	500	120000
-AGENDA TAMAÑO CARTA 	1	90000
-SELLO EN MADERA 	1	45000
-PASTELITOS	1000	100000`;
-
-/* ====== parse seed ====== */
-function parseSeedToMap(txt){
-  const map = new Map();
-  const lines=(txt||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  for(const ln of lines){
-    const p=ln.split(/\t+/);
-    if(p.length<3) continue;
-    const name=clean(p[0]); const qty=int(p[1]); const price=int((p[2]||"").toString().replace(/[^\d]/g,""));
-    if(!name||!qty||price<0) continue;
-    const cat = autoCategory(name);
-    const key = `${cat}:::${name}`;
-    if(!map.has(key)) map.set(key,{category:cat,name,unit:null,tiers:[]});
-    const item = map.get(key);
-    const ex = (item.tiers||[]).find(t=>t.qty===qty);
-    if(ex) ex.price=price; else item.tiers.push({qty,price});
+AGENDA TAMAÑO CARTA	1	90000
+SELLO EN MADERA	1	45000
+PASTELITOS	1000	100000
+`;
+function ensureLocalSeed(){
+  if(!localStorage.getItem(SEED_FLAG_LOCAL)){
+    // cargar a memoria
+    bulkImport(SEED,{auto:true});
+    localStorage.setItem(SEED_FLAG_LOCAL,"1");
   }
-  for(const it of map.values()) it.tiers.sort((a,b)=>a.qty-b.qty);
-  return map;
+  loadLocal(); fillCats(); if(!$("#categoria").value) $("#categoria").selectedIndex=0; fillProducts();
+  renderTable();
 }
-function mapToCAT(map){
-  const next={};
-  for(const it of map.values()){
-    if(!next[it.category]) next[it.category]=[];
-    next[it.category].push(it);
-  }
-  return next;
-}
-
-/* ====== carga inmediata: cache válida o semilla ====== */
-function loadImmediate(){
-  let loaded=false;
-  try{
-    const raw=localStorage.getItem(CACHE);
-    if(raw){
-      const parsed=JSON.parse(raw);
-      if(parsed && Object.keys(parsed).length){ CAT=parsed; loaded=true; setBadge("Cache ✓"); }
-    }
-  }catch{}
-  if(!loaded){
-    CAT = mapToCAT(parseSeedToMap(SEED));  // siempre muestra algo
-    setBadge("Semilla local ✓");
-  }
-  applyAndRender();
-}
-
-/* ====== sembrar en Firestore si está vacío ====== */
-async function seedRemoteIfEmpty(){
-  if(!db) return;
-  const colRef = collection(db,"catalog");
-  const snap = await getDocs(query(colRef, limit(1)));
-  if(!snap.empty){ setBadge("Remoto ✓"); return; }
-  setBadge("Sembrando en Firestore…");
-  const m=parseSeedToMap(SEED);
-  const entries=[...m.entries()];
-  let i=0;
-  while(i<entries.length){
-    const batch=writeBatch(db);
-    for(let j=0;j<500 && i<entries.length;j++,i++){
-      const [key,item]=entries[i];
-      batch.set(doc(db,"catalog",encodeURIComponent(key)), {...item,updatedAt:serverTimestamp()});
-    }
-    await batch.commit();
-  }
-  setBadge("Sembrado ✓");
-}
-
-/* ====== live sync ====== */
-function subscribe(){
-  if(!db) return;
-  const colRef = collection(db,"catalog");
-  const q = query(colRef, orderBy("category"), orderBy("name"));
-  onSnapshot(q, (snap)=>{
-    const next={};
-    snap.forEach(d=>{
-      const it=d.data();
-      if(!next[it.category]) next[it.category]=[];
-      next[it.category].push({
-        category:it.category, name:it.name,
-        unit: it.unit ?? null,
-        tiers: Array.isArray(it.tiers)? it.tiers.map(t=>({qty:t.qty,price:t.price})).sort((a,b)=>a.qty-b.qty) : []
-      });
-    });
-    if(Object.keys(next).length){
-      CAT=next; applyAndRender(); setBadge("En vivo ✓");
-    }
-  }, (err)=>{ console.warn(err); setBadge("Offline (cache)"); });
-}
-
-/* ====== CRUD ====== */
-async function upsertItem(item){
-  if(!db){ alert("Sin Firestore. Revisa firebaseConfig y reglas."); return; }
-  await setDoc(doc(db,"catalog",encodeURIComponent(`${item.category}:::${item.name}`)), {
-    ...item, updatedAt: serverTimestamp()
-  });
-}
-async function agregar(){
-  const cat = clean($("#g_cat").value) || $("#categoria").value || "Catálogo";
-  const name= clean($("#g_name").value);
-  const tipo=$("#g_tipo").value;
-  const qty = int($("#g_qty").value);
-  const price = int($("#g_price").value);
-  if(!cat || !name || (tipo==="tier" && (!qty||!price)) || (tipo==="unit" && !price)){
-    alert("Completa categoría, producto y precio (y cantidad si es por tier)."); return;
-  }
-  let item = {category:cat, name, unit:null, tiers:[]};
-  if(tipo==="unit"){ item.unit=price; }
-  else { item.tiers=[{qty,price}]; }
-  const prev = (CAT[cat]||[]).find(x=>x.name===name);
-  if(prev){
-    if(tipo==="unit"){ item.tiers=[]; }
-    else{
-      const map=new Map();
-      (prev.tiers||[]).forEach(t=>map.set(t.qty,t.price));
-      map.set(qty,price);
-      item.tiers=[...map.entries()].map(([q,p])=>({qty:q,price:p})).sort((a,b)=>a.qty-b.qty);
+/* empujar semilla al remoto una sola vez por navegador */
+async function pushSeedToRemoteOnce(){
+  if(!FIREBASE||!db) return;
+  if(localStorage.getItem(PUSHED_REMOTE)) return;
+  for(const cat of Object.keys(CAT)){
+    await setDoc(doc(db,"cats",cat),{name:cat},{merge:true}).catch(()=>{});
+    for(const it of CAT[cat]){
+      const id=docId(cat,it.name);
+      const body = (it.unit)
+        ? {cat:it.cat,name:it.name,nameUpper:it.name.toUpperCase(),type:"unit",unit:it.unit,tiers:[],updatedAt:serverTimestamp()}
+        : {cat:it.cat,name:it.name,nameUpper:it.name.toUpperCase(),type:"tier",unit:null,tiers:it.tiers||[],updatedAt:serverTimestamp()};
+      await setDoc(doc(db,"items",id), body, {merge:true}).catch(()=>{});
     }
   }
-  await upsertItem(item);
-  setBadge("Guardado ✓");
-  $("#g_name").value=""; $("#g_price").value="0"; $("#g_qty").value="1000";
+  localStorage.setItem(PUSHED_REMOTE,"1");
 }
 
-/* ====== bulk ====== */
-async function bulkImport(txt,{auto=true,dest="Catálogo"}={}){
-  if(!db){ alert("Sin Firestore. Revisa firebaseConfig y reglas."); return; }
-  const lines=(txt||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  const grouped=new Map();
-  for(const ln of lines){
-    const p=ln.split(/\t+/); if(p.length<3) continue;
-    const name=clean(p[0]); const qty=int(p[1]); const price=int((p[2]||"").toString().replace(/[^\d]/g,""));
-    if(!name||!qty||price<0) continue;
-    const cat = auto ? autoCategory(name) : dest;
-    const key = `${cat}:::${name}`;
-    if(!grouped.has(key)) grouped.set(key,{category:cat,name,unit:null,tiers:[]});
-    const it=grouped.get(key);
-    const ex=(it.tiers||[]).find(t=>t.qty===qty);
-    if(ex) ex.price=price; else it.tiers.push({qty,price});
-  }
-  for(const it of grouped.values()){
-    it.tiers.sort((a,b)=>a.qty-b.qty);
-    await upsertItem(it);
-  }
-  setBadge("Importado ✓");
+/* ===== init ===== */
+function initUI(){
+  $("#btnCalcular").addEventListener("click",calcular);
+  $("#btnPrint").addEventListener("click",()=>window.print());
+  $("#categoria").addEventListener("change",fillProducts);
+  $("#producto").addEventListener("change",setHint);
+  $("#btnAgregar").addEventListener("click",agregar);
+  $("#btnLimpiar").addEventListener("click",clearForm);
+  $("#btnBulk").addEventListener("click",()=>bulkImport($("#bulk_text").value,{auto:$("#bulk_autocat").checked,dest:clean($("#bulk_cat").value)||"Catálogo"}));
 }
 
-/* ====== eventos ====== */
-$("#btnCalcular").addEventListener("click",calcular);
-$("#btnPrint").addEventListener("click",()=>window.print());
-$("#categoria").addEventListener("change",()=>{fillProducts();setHint();renderTable();});
-$("#producto").addEventListener("change",setHint);
-$("#btnAgregar").addEventListener("click",agregar);
-$("#btnLimpiar").addEventListener("click",()=>{
-  $("#g_cat").value=""; $("#g_name").value="";
-  $("#g_tipo").value="tier";
-  $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1; $("#g_qty").value="1000";
-  $("#g_price").value="0";
-});
-$("#g_tipo").addEventListener("change",()=>{
-  const isU=$("#g_tipo").value==="unit";
-  $("#g_qty").disabled=isU;
-  $("#g_qty_wrap").style.opacity = isU ? 0.35 : 1;
-});
-$("#btnBulk").addEventListener("click",()=>{
-  const txt=$("#bulk_text").value;
-  const auto=$("#bulk_autocat").checked;
-  const dest=clean($("#bulk_cat").value)||"Catálogo";
-  bulkImport(txt,{auto,dest});
-});
-
-/* ====== arranque ====== */
-loadImmediate();          // pinta de una (seed o cache válida)
-await seedRemoteIfEmpty(); // si Firestore está vacío, lo siembra
-subscribe();               // escucha cambios en vivo (si hay Firestore)
+(async function start(){
+  initUI();
+  if(FIREBASE){
+    initFirestore();
+    ensureLocalSeed();            // UI inmediata
+    await listenCats();           // categorías desde remoto
+    await pushSeedToRemoteOnce(); // una sola vez
+  }else{
+    ensureLocalSeed(); // solo local
+    badge.textContent="Solo local";
+  }
+})();
 </script>
 </body>
 </html>
