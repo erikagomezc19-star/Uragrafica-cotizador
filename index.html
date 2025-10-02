@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Uragráfica — Cotizador</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}
+  body{background:#f4f6f8;color:#111;line-height:1.45;font-size:15px}
+  .wrap{max-width:1100px;margin:16px auto;padding:0 14px}
+  .topbar{background:#1f73c3;color:#fff;padding:10px 14px;border-bottom:3px solid #135ca7}
+  .topbar .bar{display:flex;justify-content:space-between;align-items:center}
+  .logo{font-weight:800}
+  h1{margin-top:6px;font-size:20px;font-weight:800;text-align:center}
+  .actions{display:flex;gap:8px}
+  button{cursor:pointer}
+  .primary{background:#2ecc71;color:#fff;border:none;border-radius:8px;padding:8px 12px}
+  .secondary{background:#0b57d0;color:#fff;border:none;border-radius:8px;padding:8px 12px}
+  .ghost{background:#fff;border:1px solid #bcd0ea;color:#0b57d0;border-radius:8px;padding:8px 12px}
+
+  .card{background:#fff;border:1px solid #e3e9ef;border-radius:12px;padding:14px;margin:12px 0;box-shadow:0 2px 10px rgba(0,0,0,.04)}
+  .card h2{margin-bottom:8px;color:#0f2b46;font-size:18px}
+
+  .grid{display:grid;gap:10px}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+
+  label{display:flex;flex-direction:column;font-size:14px;color:#233}
+  input,select,textarea{margin-top:6px;padding:10px;border:1px solid #c8d2dc;border-radius:8px;background:#f9fbfc}
+  textarea{min-height:120px;resize:vertical}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:#1f73c3;background:#fff}
+
+  .muted{font-size:12px;color:#6a7d90;margin-top:6px}
+  .detalle{min-height:64px;border:1px dashed #c9d3dd;border-radius:10px;padding:10px;background:#fbfdff}
+  .money{font-weight:800}
+  .money.total{color:#e53935;font-size:18px}
+  .row{display:flex;justify-content:space-between;margin:4px 0}
+
+  .tabla-cat{margin-top:8px;border:1px solid #e4e9ef;border-radius:10px;overflow:hidden}
+  .tabla-cat table{width:100%;border-collapse:collapse}
+  .tabla-cat th,.tabla-cat td{padding:8px;border-top:1px solid #eef2f6;font-size:13px}
+  .tabla-cat thead th{background:#f7fafc;text-align:left;color:#274664}
+  .chip{background:#eef6ff;border:1px solid #cfe2ff;padding:0 8px;border-radius:12px;font-size:12px}
+  .del{background:#ffebee;border:1px solid #ffcdd2;color:#c62828;padding:6px 10px;border-radius:8px;cursor:pointer}
+  .edit{background:#e8f5e9;border:1px solid #c8e6c9;color:#1b5e20;padding:6px 10px;border-radius:8px;cursor:pointer;margin-right:6px}
+
+  .mt8{margin-top:8px}
+
+  .print{display:none}
+  @media print{.topbar,.card:not(.print){display:none!important}.print{display:block;border:none;box-shadow:none}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="bar">
+    <div class="logo">Uragráfica</div>
+    <div class="actions">
+      <button id="btnCalcular" class="primary">Calcular</button>
+      <button id="btnPrint" class="secondary">Imprimir / PDF</button>
+    </div>
+  </div>
+  <h1>Cotizador</h1>
+</header>
+
+<main class="wrap">
+  <!-- Cotizador -->
+  <section class="card">
+    <h2>Selecciona</h2>
+    <div class="grid g4">
+      <label>Categoría *
+        <select id="categoria"></select>
+      </label>
+      <label>Producto *
+        <select id="producto"></select>
+      </label>
+      <label>Cantidad *
+        <input id="cantidad" type="number" min="1" value="1000"/>
+      </label>
+      <label>IVA
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+          <input id="incluirIVA" type="checkbox"/>
+          <span>Incluir IVA (19%)</span>
+        </div>
+      </label>
+    </div>
+    <div id="ayuda" class="muted">—</div>
+  </section>
+
+  <!-- Resultado -->
+  <section class="card">
+    <h2>Detalle</h2>
+    <div id="detalle" class="detalle">Presiona “Calcular”.</div>
+    <div class="grid g3 mt8">
+      <div>
+        <div class="muted">Subtotal + IVA</div>
+        <div id="subProd" class="money">—</div>
+      </div>
+      <div></div>
+      <div>
+        <div class="muted">TOTAL</div>
+        <div id="total" class="money total">—</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Gestión de catálogo -->
+  <section class="card">
+    <h2>Catálogo (agregar / editar / eliminar)</h2>
+
+    <div class="grid g4">
+      <label>Categoría
+        <input id="g_cat" placeholder="p.ej. Talonarios"/>
+      </label>
+      <label>Producto
+        <input id="g_name" placeholder="Nombre del producto"/>
+      </label>
+      <label>Tipo de precio
+        <select id="g_tipo">
+          <option value="tier" selected>Por cantidad (tiers)</option>
+          <option value="unit">Unitario</option>
+        </select>
+      </label>
+      <label id="g_qty_wrap">Cantidad (para tier)
+        <input id="g_qty" type="number" min="1" value="1000"/>
+      </label>
+    </div>
+
+    <div class="grid g3 mt8">
+      <label>Precio (COP)
+        <input id="g_price" type="number" min="0" value="0"/>
+      </label>
+      <div style="display:flex;gap:8px;align-items:end">
+        <button id="btnAgregar" class="primary">Agregar / Actualizar</button>
+        <button id="btnLimpiar" class="ghost">Limpiar formulario</button>
+      </div>
+    </div>
+
+    <div class="mt8">
+      <details>
+        <summary><b>Importación masiva</b> (pega líneas: <i>Nombre [tab] Cantidad [tab] Precio</i>)</summary>
+        <div class="mt8 grid g4">
+          <label>Destino (si no auto)
+            <input id="bulk_cat" placeholder="p.ej. Talonarios" value="Talonarios"/>
+          </label>
+          <label style="grid-column:span 2;display:flex;align-items:end;gap:8px">
+            <input id="bulk_autocat" type="checkbox" checked/>
+            <span>Auto separar por categoría (según nombre)</span>
+          </label>
+        </div>
+        <textarea id="bulk_text" placeholder="Ej:
+STICKER LAMINADO TROQUELADO 5X5	1000	178000
+ADHESIVO 80X40 SIN LAMINAR	1	25000
+..."></textarea>
+        <div class="mt8" style="display:flex;gap:8px">
+          <button id="btnBulk" class="ghost">Cargar líneas</button>
+          <span class="muted">Líneas con el mismo nombre se agrupan como tiers; si ya existe, se actualiza.</span>
+        </div>
+      </details>
+    </div>
+
+    <div class="mt8">
+      <div class="muted">Ítems de la categoría seleccionada:</div>
+      <div id="tablaCat" class="tabla-cat"></div>
+    </div>
+  </section>
+
+  <!-- Vista impresión -->
+  <section class="card print">
+    <h2>COTIZACIÓN</h2>
+    <div id="pv"></div>
+  </section>
+</main>
+
+<script>
+/* ===== helpers ===== */
+const $=s=>document.querySelector(s);
+const $$=s=>[...document.querySelectorAll(s)];
+const fmt=new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+const money=v=>fmt.format(Math.round(v||0));
+const int=n=>Math.max(0,parseInt(n||0,10));
+const clean=s=>(s||"").toString().trim();
+
+/* ===== categorización automática (STICKERS ≠ ADHESIVOS) ===== */
+function autoCategory(name){
+  const s=(name||"").toUpperCase();
+
+  // ► STICKERS (y variantes)
+  if (/(^|\s)STI?C?K?KER(S)?\b|(^|\s)STIKER(S)?\b|PEGATINA(S)?\b|CALCOMANI(A|AS)\b/.test(s))
+    return "Stickers";
+
+  // ► ADHESIVOS (NO incluye “sticker”)
+  if (/\bADHESIV(O|A|OS|AS)\b|VINIL(O|OS)\b|MICROPERFORAD/.test(s))
+    return "Adhesivos";
+
+  if(/VASO|MUG|TAZA/.test(s)) return "Vasos/Mugs";
+  if(/TARJETA/.test(s)) return "Tarjetas";
+  if(/VOLANTE/.test(s)) return "Volantes";
+  if(/\bGOMA\s*SELLO\b/.test(s)) return "Gomas de sello";
+  if(/CAJA.*SELLO|TRODAT.*CAJA|CAJA\s+DE\s+SELLO/.test(s)) return "Cajas para sello";
+  if(/SELLO|FECHADOR|FECHERO/.test(s)) return "Sellos";
+  if(/TALONARIO|LORD/.test(s)) return "Talonarios";
+  if(/PEND(Ó|O)N|ROLL\s*UP|ARAÑA|LONA|BANNER|VALLA|BACKING/.test(s)) return "Grandes Formatos";
+  if(/AGENDA/.test(s)) return "Agendas";
+  if(/CARNET|TESLI/.test(s)) return "Carnets";
+  if(/AFICHE/.test(s)) return "Afiches";
+  if(/BOLETA/.test(s)) return "Boletas";
+  if(/CARTA MEN(Ú|U)/.test(s)) return "Cartas Menú";
+  if(/LLAVEROS|LAPICERO|BOTONES|MANILLAS|ABANICO|PASTELITOS|PORTAFOLIOS/.test(s)) return "Promocionales";
+  if(/LAMINA|OPAL|TABLAS\s+DE\s+PRECIO/.test(s)) return "Materiales";
+  if(/CORTE DE PAPEL|TIJERA|ROMPE\s*TRAFICO/.test(s)) return "Servicios";
+  if(/IMPRESIÓN|IMPRESION/.test(s)) return "Impresión";
+  return "Otros";
+}
+
+/* ===== catálogo base mínimo (fallback) ===== */
+const BASE = {
+  "Tarjetas":[{name:"TARJETAS DE PRESENTACIÓN BRILLO (1000)",tiers:[{qty:1000,price:130000}]}],
+  "Volantes":[{name:"VOLANTE MEDIA CARTA PROPALCOTE 115 4X0",tiers:[{qty:1000,price:150000}]}]
+};
+
+const STORAGE="uragrafica_cat_v10";
+const SEED_FLAG="uragrafica_seed_v10";
+
+let CAT;
+try{ CAT=JSON.parse(localStorage.getItem(STORAGE)) || JSON.parse(JSON.stringify(BASE)); }
+catch{ CAT=JSON.parse(JSON.stringify(BASE)); }
+function persist(){ try{ localStorage.setItem(STORAGE, JSON.stringify(CAT)); }catch{} }
+
+/* índice */
+let INDEX={};
+function rebuildIndex(){
+  INDEX={};
+  Object.keys(CAT).forEach(k=>{
+    INDEX[k]={};
+    CAT[k].forEach(it=>INDEX[k][it.name]=it);
+  });
+}
+
+/* selects */
+function fillCats(){
+  const sel=$("#categoria"); sel.innerHTML="";
+  Object.keys(CAT).sort().forEach(c=>{
+    const o=document.createElement("option"); o.value=o.textContent=c; sel.appendChild(o);
+  });
+}
+function fillProducts(){
+  const cat=$("#categoria").value; const sel=$("#producto"); sel.innerHTML="";
+  (CAT[cat]||[]).map(x=>x.name).sort().forEach(n=>{
+    const o=document.createElement("option"); o.value=o.textContent=n; sel.appendChild(o);
+  });
+}
+function setHint(){
+  const cat=$("#categoria").value, name=$("#producto").value;
+  const it=(INDEX[cat]||{})[name]; const el=$("#ayuda");
+  if(!it){ el.textContent="—"; return; }
+  if(it.unit) el.textContent=`Unitario: ${money(it.unit)} × cantidad.`;
+  else if(it.tiers?.length){
+    const txt=it.tiers.map(t=>`${t.qty} → ${money(t.price)}`).slice(0,8).join(" · ");
+    el.textContent=`Tirajes: ${txt}${it.tiers.length>8?" …":""}`;
+  } else el.textContent="Ítem sin precio.";
+}
+
+/* ===== CÁLCULO (ajustado: prorrateo con TIER INFERIOR) ===== */
+function priceByQty(it,qty){
+  if(!it) return {base:0};
+  // unitario puro
+  if(it.unit && !(it.tiers?.length)) return {base:it.unit*qty};
+
+  if(it.tiers?.length){
+    const tiers=[...it.tiers].sort((a,b)=>a.qty-b.qty);
+    // 1) exacto
+    const exact=tiers.find(t=>t.qty===qty);
+    if(exact) return {base:exact.price};
+
+    // 2) buscar inferior y superior
+    let lower=null, higher=null;
+    for(const t of tiers){
+      if(t.qty<=qty) lower=t;
+      if(t.qty>=qty){ higher=t; break; }
+    }
+    // Regla: usar SIEMPRE el inferior si existe, si no, el primero (superior mínimo)
+    const chosen = lower || higher || tiers[0];
+    const unit = chosen.price/ chosen.qty;
+    return {base:unit*qty};
+  }
+  return {base:0};
+}
+
+function calcular(){
+  const cat=$("#categoria").value, name=$("#producto").value, qty=int($("#cantidad").value);
+  const incIVA=$("#incluirIVA").checked;
+  const it=(INDEX[cat]||{})[name];
+  const {base}=priceByQty(it,qty);   // nota oculta
+  const subtotal=base;
+  const iva=incIVA?subtotal*0.19:0;
+  const total=subtotal+iva;
+
+  $("#detalle").innerHTML = `
+    <div class="row">
+      <div>${name}</div>
+      <div class="money">${money(base)}</div>
+    </div>
+    <hr style="border:none;border-top:1px dashed #c9d3dd;margin:6px 0;">
+    <div class="row"><span>IVA ${incIVA?"(19%)":"(no incluido)"} </span><strong>${money(iva)}</strong></div>
+  `;
+  $("#subProd").textContent=money(subtotal+iva);
+  $("#total").textContent=money(total);
+
+  $("#pv").innerHTML=`
+    <div class="row"><strong>Producto:</strong><span>${name}</span></div>
+    <div class="row"><strong>Categoría:</strong><span>${cat}</span></div>
+    <div class="row"><strong>Cantidad:</strong><span>${qty.toLocaleString("es-CO")}</span></div>
+    <div class="row"><strong>Subtotal:</strong><span>${money(subtotal)}</span></div>
+    <div class="row"><strong>IVA:</strong><span>${money(iva)}</span></div>
+    <div class="row"><strong>TOTAL:</strong><span>${money(total)}</span></div>`;
+}
+
+/* gestión */
+function ensureCat(name){ if(!CAT[name]) CAT[name]=[]; }
+function findItem(cat,name){ return (CAT[cat]||[]).find(x=>x.name===name); }
+function upsertUnit(cat,name,price){
+  ensureCat(cat);
+  let it=findItem(cat,name);
+  if(!it){ it={name,unit:price}; CAT[cat].push(it); }
+  else { it.unit=price; delete it.tiers; }
+}
+function upsertTier(cat,name,qty,price){
+  ensureCat(cat);
+  let it=findItem(cat,name);
+  if(!it){ it={name,tiers:[]}; CAT[cat].push(it); }
+  it.tiers=it.tiers||[];
+  const ex=it.tiers.find(t=>t.qty===qty);
+  if(ex) ex.price=price; else it.tiers.push({qty,price});
+  it.tiers.sort((a,b)=>a.qty-b.qty); delete it.unit;
+}
+function saveAndRefresh(selectCat){
+  persist(); rebuildIndex(); fillCats();
+  if(selectCat) $("#categoria").value=selectCat;
+  fillProducts(); setHint(); renderTable();
+}
+function agregar(){
+  const cat = clean($("#g_cat").value) || $("#categoria").value || "Catálogo";
+  const name= clean($("#g_name").value);
+  const tipo=$("#g_tipo").value;
+  const qty = int($("#g_qty").value);
+  const price = int($("#g_price").value);
+  if(!cat || !name || (tipo==="tier" && (!qty||!price)) || (tipo==="unit" && !price)){
+    alert("Completa categoría, producto y precio (y cantidad si es por tier)."); return;
+  }
+  if(tipo==="unit") upsertUnit(cat,name,price); else upsertTier(cat,name,qty,price);
+  saveAndRefresh(cat);
+  $("#g_name").value=""; $("#g_price").value="0"; $("#g_qty").value="1000";
+}
+function clearForm(){
+  $("#g_cat").value=""; $("#g_name").value="";
+  $("#g_tipo").value="tier";
+  $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1; $("#g_qty").value="1000";
+  $("#g_price").value="0";
+}
+$("#g_tipo").addEventListener("change",()=>{
+  const isU=$("#g_tipo").value==="unit";
+  $("#g_qty").disabled=isU;
+  $("#g_qty_wrap").style.opacity = isU ? 0.35 : 1;
+});
+
+function renderTable(){
+  const cat=$("#categoria").value; const cont=$("#tablaCat"); const arr=CAT[cat]||[];
+  if(!arr.length){ cont.innerHTML="<div class='muted' style='padding:8px'>No hay ítems.</div>"; return; }
+  const rows=arr.map((it,i)=>{
+    const tipo=it.unit?`<span class="chip">Unitario</span>`:`<span class="chip">Por cantidad</span>`;
+    const val = it.unit? money(it.unit) : it.tiers.map(t=>`${t.qty}→${money(t.price)}`).join(" · ");
+    return `<tr>
+      <td>${it.name}</td>
+      <td>${tipo}</td>
+      <td>${val||"-"}</td>
+      <td style="text-align:right">
+        <button class="edit" data-i="${i}">Editar</button>
+        <button class="del" data-i="${i}">Eliminar</button>
+      </td>
+    </tr>`;
+  }).join("");
+  cont.innerHTML=`<table>
+    <thead><tr><th>Producto</th><th>Tipo</th><th>Precio / Tiers</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+
+  cont.querySelectorAll(".del").forEach(b=>{
+    b.addEventListener("click",()=>{
+      const i=parseInt(b.dataset.i,10);
+      if(!confirm("¿Seguro que quieres eliminar este ítem del catálogo?")) return;
+      CAT[cat].splice(i,1);
+      saveAndRefresh(cat);
+    });
+  });
+  cont.querySelectorAll(".edit").forEach(b=>{
+    b.addEventListener("click",()=>{
+      const i=parseInt(b.dataset.i,10);
+      const it=CAT[cat][i];
+      $("#g_cat").value=cat;
+      $("#g_name").value=it.name;
+      if(it.unit){
+        $("#g_tipo").value="unit";
+        $("#g_qty").disabled=true; $("#g_qty_wrap").style.opacity=0.35;
+        $("#g_price").value=it.unit;
+      }else{
+        $("#g_tipo").value="tier";
+        $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1;
+        const first=it.tiers[0]||{qty:1000,price:0};
+        $("#g_qty").value=first.qty;
+        $("#g_price").value=first.price;
+        alert("Edita precio/cantidad y pulsa “Agregar / Actualizar”. Cambia cantidad para añadir otro tier.");
+      }
+      window.scrollTo({top:0,behavior:"smooth"});
+    });
+  });
+}
+
+/* importación masiva */
+function parseMoney(s){
+  s=(s||"").toString().trim();
+  s=s.replace(/[^\d,\.]/g,"");
+  if(/^\d+,\d+$/.test(s)) s=s.replace(",", ""); // 6,60 -> 660 (formato legado)
+  s=s.replace(/\./g,"").replace(/,/g,"");
+  const v=parseInt(s||"0",10);
+  return isFinite(v)?v:0;
+}
+function bulkImport(txt,{auto=true,dest="Catálogo"}={}){
+  const lines=(txt||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  for(const ln of lines){
+    const p=ln.split(/\t+/);
+    if(p.length<3) continue;
+    const name=clean(p[0]); const qty=int(p[1]); const price=parseMoney(p[2]);
+    if(!name||!qty||price<0) continue;
+    const cat = auto ? autoCategory(name) : dest;
+    upsertTier(cat,name,qty,price);
+  }
+  saveAndRefresh();
+}
+
+/* ======== SEED COMPLETO (tus datos actualizados) ======== */
+const SEED = `
+
+/* --- SELLOS (precios nuevos) + CAJAS TRODAT --- */
+SELLOS AUTOMATICOS 4911	1	55000
+SELLOS AUTOMATICOS 4912	1	60000
+SELLOS AUTOMATICOS 4913	1	65000
+SELLO AUTOMATICO DE BOLSILLO	1	55000
+SELLO AUTOMATICO FECHERO S-542D	1	90000
+CAJA DE SELLO TRODAT 4911	1	21000
+CAJA DE SELLO TRODAT 4912	1	24200
+CAJA DE SELLO TRODAT 4913	1	28300
+
+/* --- STICKERS (categoría independiente) --- */
+STICKER LAMINADO TROQUELADO 5X5	1000	178000
+STICKER SIN LAMINAR TROQUELADO 5X5	1000	136000
+STICKER LAMINADO TROQUELADO 7X7	1000	342000
+STICKER SIN LAMINAR TROQUELADO 5X5	1000	260000
+STICKERS 4X4	100	40000
+
+/* --- TALONARIOS (lista completa) --- */
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	1	40000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	2	50000
+TALONARIO 1/2 CARTA ORIGINAL Y DOS COPIAS QUIMICO	2	60000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	3	55000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	5	75000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	10	110000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	20	180000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	50	387000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO A 2 TINTAS	50	474000
+TALONARIO 1/2 CARTA DOS COPIAS QUIMICO	1	35000
+TALONARIO 1/2 CARTA DOS COPIAS QUIMICO	5	85000
+TALONARIO 1/2 CARTA DOS COPIAS QUIMICO	10	140850
+TALONARIO 1/2 CARTA DOS COPIAS QUIMICO	20	248350
+TALONARIO 20 x 14 ORIGINAL Y UNA  COPIAS QUIMICO SIN NUMERAR	50	125000
+TALONARIO 1/2 OFICIO UNA COPIA QUIMICO	1	40000
+TALONARIO 1/2 OFICIO DOS COPIA QUIMICO	1	35000
+TALONARIO 1/2 OFICIO UNA COPIA QUIMICO	2	40000
+TALONARIO 1/2 OFICIO UNA COPIA QUIMICO	5	70000
+TALONARIO 1/2 OFICIO UNA COPIA QUIMICO 20x16	10	122000
+TALONARIO 1/2 OFICIO UNA COPIA QUIMICO NUMERADOS	30	252000
+TALONARIO 1/2 OFICIO DOS  COPIA QUIMICO	10	142000
+TALONARIO 25X17.5 UNA COPIA QUIMICO	1	35000
+TALONARIO 25X17.5 UNA COPIA QUIMICO	2	45000
+TALONARIO 25X17.5 UNA COPIA QUIMICO	5	75000
+TALONARIO 25X17.5 UNA COPIA QUIMICO	10	122850
+TALONARIO 25X17.5 UNA COPIA QUIMICO	20	222500
+TALONARIO 1/4 DE CARTA UNA COPIA QUIMICO	2	35000
+TALONARIO 1/4 DE CARTA UNA COPIA QUIMICO	5	65000
+TALONARIO 1/4 DE CARTA UNA COPIA QUIMICO	10	70000
+TALONARIO 1/4 DE CARTA UNA COPIA QUIMICO	20	100000
+TALONARIO 1/4 DE CARTA UNA COPIA QUIMICO	50	198600
+TALONARIO 1/4 DE CARTA PAPEL BOND ORIGINAL SIN NUMERAR	50	120000
+TALONARIO 1/4 DE CARTA PAPEL BOND ORIGINAL	10	50000
+TALONARIO 1/4 OFICIO UNA COPIA QUIMICO	2	35000
+TALONARIO 1/4 OFICIO UNA COPIA QUIMICO	5	75000
+TALONARIO 1/4 OFICIO DOS COPIA QUIMICO	10	131650
+TALONARIO 1/4 OFICIO UNA COPIA QUIMICO 12x9	10	90000
+TALONARIO 1/4 OFICIO UNA COPIA QUIMICO	20	105000
+TALONARIO 1/4 OFICIO UNA COPIA QUIMICO	100	450000
+TALONARIO 1/4 OFICIO ORIGINAL Y DOS COPIAS EN QUIMICO	20	173400
+TALONARIO 1/4 OFICIO UNA COPIA QUIMICO FULL COLOR	5	105000
+TALONARIO CARTA UNA COPIA QUIMICO	1	40000
+TALONARIO CARTA UNA COPIA QUIMICO	2	50000
+TALONARIO CARTA UNA COPIA QUIMICO	5	90000
+TALONARIO CARTA UNA COPIA QUIMICO	10	155250
+TALONARIO CARTA UNA COPIA QUIMICO	20	337500
+TALONARIO OFICIO UNA COPIA QUIMICO	1	40000
+TALONARIO OFICIO UNA COPIA QUIMICO	2	50000
+TALONARIO OFICIO UNA COPIA QUIMICO	5	95000
+TALONARIO OFICIO UNA COPIA QUIMICO	10	177450
+TALONARIO OFICIO SOLO ORIGINAL	1	56000
+TALONARIO OFICIO SOLO ORIGINAL	5	91000
+TALONARIO OFICIO SOLO ORIGINAL	10	130000
+TALONARIO OFICIO SOLO ORIGINAL	20	250000
+TALONARIO 1/2 CARTA UNA COPIA BOND	5	60000
+TALONARIO 1/2 CARTA UNA COPIA BOND	10	80000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND	10	85000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND TIRO - RETIRO	10	96650
+TALONARIO 1/2 OFICIO UNA COPIA BOND	5	80000
+TALONARIO 1/2 OFICIO UNA COPIA BOND	10	110000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND	3	42000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND	5	65000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND	10	85000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND FULL COLOR	40	305000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND	20	109500
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND A DOS TINTAS	30	195000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND RECETARIOS	10	85000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND RECETARIOS	5	55000
+TALONARIO CARTA SOLO ORIGINAL BOND	1	40000
+TALONARIO CARTA SOLO ORIGINAL BOND SIN NUMERAR	3	46650
+TALONARIO CARTA SOLO ORIGINAL BOND	5	70000
+TALONARIO CARTA SOLO ORIGINAL BOND	10	158350
+TALONARIO CARTA SOLO ORIGINAL BOND NUMERADO 1*1	20	286650
+TALONARIO CARTA TIRO RETIRO BOND	5	96650
+TALONARIO CARTA TIRO RETIRO BOND	10	117000
+TALONARIO 1/4 DE OFICIO EN BOND SIN NUMERAR	10	50000
+TALONARIO 1/4 DE OFICIO EN BOND  NUMERADO	5	51350
+TALONARIO LORD 12.5 X 17.5 QUIMICO DOS COPIAS	10	94500
+TALONARIO LORD 12.5 X 17.5 QUIMICO DOS COPIAS	20	146650
+TALONARIO LORD 12.5 X 17.5 QUIMICO UNA COPIA	10	95000
+TALONARIO LORD 12.5 X 17.5 QUIMICO UNA COPIA	20	105000
+TALONARIO LORD 12.5 X 17.5 SOLO ORIGINAL	10	55000
+TALONARIO LORD 12.5 X 17.5 SOLO ORIGINAL	20	147000
+TALONARIO X 100 HOJAS ORIGINAL	5	55000
+TALONARIO 1/8 DE OFICIO EN BOND	50	280000
+TALONARIO 1/8 DE OFICIO EN BOND	100	220000
+
+/* --- OTRAS CATEGORÍAS --- */
+VASO MUGS	1	18000
+GOMA SELLO	1	15000
+CARTA MENÚ	10	18000
+CARTA MENU TAMAÑO CARTA X 6 PAGINAS DOBLES	1	36000
+AGENDAS 25 X 17.5	1	45000
+AGENDAS MEDIO OFICIO 23X16.5	1	35000
+CARNET EN PVC INDIVIDUAL	1	10000
+CARNET EN PVC CON PORTA CARNET	1	18000
+TARJETAS DE PRESETACION BRILLO	1000	130000
+TARJETAS DE PRESETACION MATTE	1000	160000
+TARJETAS DE PRESETACION MATE Y RESERVA	1000	180000
+TARJETAS IMANTADAS	1000	400000
+TARJETAS DE PRESENTACION MATTE CON RESERVA UN LADO	1000	143000
+TARJETAS DE PRSENTACION MATTE CON RESERVA DOS LADO	1000	158000
+TARJETAS DE PRESETACION LAMINADA	100	30000
+TARJETAS DE PRESETACION LAMINADA	500	100000
+TARJETAS DE COBRO 14 X 8	1000	70000
+TARJETAS DE COBRO 14 X 8	500	55000
+VOLANTES MEDIA CARTA PROPALCOTE 115 4X0	1000	150000
+VOLANTES MEDIA CARTA PROPALCOTE 115 DOS LADOS 4X4	1000	240000
+VOLANTES MEDIA CARTA PROPALCOTE 115 UNA TINTA	1000	100000
+VOLANTES MEDIA CARTA FULL COLOR  PAPEL BOND A DOS  TINTA	1000	100000
+VOLANTES MEDIA CARTA PAPEL BOND UNA TINTA	1000	90000
+VOLANTES MEDIA CARTA UNA TINTA EN BOND	500	80000
+VOLANTES MEDIA CARTA PROPALCOTE 115  FULL COLOR	500	100000
+CORTE DE PAPEL	1	5000
+TABLERO EN ACRILICO DE 80 X 1,50 CON ADHESIVO AL ESPEJO CON BUJES	1	324000
+LAPICERO ESTAMPADO	1	4000
+LAPICERO ESTAMPADO EN PROPALCOTE	1	3000
+LAMINA OPAL SOLA	1	8000
+PENDON DE 60X40	1	30000
+PENDON DE 1,00 mts X 1,20 mts	1	110000
+PENDON DE 1,00 mts X 2,00 mts	1	135000
+PENDON DE 70X50	1	50000
+PENDON DE 70X100	1	60000
+PENDON DE 2,00 MTS X 2,00 MTS	1	292000
+LONA O BANNER SIN LAMINAR	1	5
+LONA BANNER  SIN LAMINAR CON INSTALACION	1	660
+BOLETAS FULL COLOR	1000	350000
+BOLETA FULL COLOR EN CARTULINA DE 7 X 16	200	60000
+BOLETAS FULL COLOR EN CARTULINA O PROPALCOTE	100	60000
+ADHESIVO DE 4 CM X 4 CM SIN LAMINAR	1000	60000
+AFICHE TAMAÑO CARTA	1	20000
+BANDERINES	1	1000
+MANILLAS EN SATIN	1	1000
+BOTONES	1	5000
+IMPRESIÓN EN BOND TAMAÑO CARTA 1X0 SIN ENGOMAR, SIN NUMERAR	1	80000
+VALLA DE 12 X 4 INSTALADA	1	8500000
+BACKING CON OJALES DE 300 X 200 (6,6)	1	396000
+LONA BANNER LAMINADO INSTALADO	1	750
+ADHESIVO 80X40 SIN LAMINAR	1	25000
+PENDON DE 2,00 MTS X 2,00 MTS	1	292000
+ADHESIVO PLASTICO DE 6 CM X 6 CM	1000	180000
+TIJERA/ROMPE TRAFICO con luces	1	3900
+SELLO CON FECHADOR	1	70000
+ADHESIVO TAMAÑO CARTA FULL COLOR	1000	725
+TABLAS DE PRECIO	1	15000
+CARNET PVC UN SOLO LADO 5,4x8,5	1	6500
+CARNET PVC 4X1	1	8500
+CARNET PVC 4X4 FULL COLOR AMBOS LADOS	1	10000
+CARNET EN TESLI UN LADO	1	3500
+CARNET EN TESLI 4*1	1	4000
+CARNETEN TESLI 4*4	1	5000
+ABANICO EN CARTON DISEÑO AMBOS LADOS	1000	1050000
+BOLETAS EN PAPEL BOND	500	0
+BOLETAS EN PAPEL PROPALCOTE	500	0
+PENDON CON ARAÑA MEDIDA 1METRO X 2 METROS	1	280000
+AGENDAS TAMAÑO CARTA 22X28	1	90000
+AGENDAS TAMAÑO 22 x24	1	60000
+AGENDAS TAMAÑO 22 x25	5	250000
+AGENDAS TAMAÑO 22 x26	10	450000
+AGENDAS TAMAÑO 1/2 CARTA	1	35000
+AGENDAS TAMAÑO 1/2 CARTA	5	150000
+AGENDAS TAMAÑO 1/2 CARTA	10	280000
+PENDÓN CON ROLL UP 100x200metros	1	350000
+VOLANTES 1/4 CARTA BLANCO Y NEGRO	3000	85000
+VOLANTES 1/4 CARTA FULL COLOR 4X4	3000	270000
+TARJETAS 7,5X13,5 EN CARTULINA	2000	0
+LLAVEROS	1	5000
+VOLANTES 4X0 PRECIO FINAL	500	120000
+AGENDA TAMAÑO CARTA	1	90000
+SELLO EN MADERA	1	45000
+PASTELITOS	1000	100000
+
+`;
+
+/* aplica el seed una sola vez */
+function seedOnce(){
+  if(localStorage.getItem(SEED_FLAG)) return;
+  bulkImport(SEED,{auto:true});
+  localStorage.setItem(SEED_FLAG,"1");
+}
+
+/* init */
+function initUI(){
+  rebuildIndex();
+  fillCats(); fillProducts(); setHint(); renderTable();
+}
+$("#btnCalcular").addEventListener("click",calcular);
+$("#btnPrint").addEventListener("click",()=>window.print());
+$("#categoria").addEventListener("change",()=>{fillProducts();setHint();renderTable();});
+$("#producto").addEventListener("change",setHint);
+$("#btnAgregar").addEventListener("click",agregar);
+$("#btnLimpiar").addEventListener("click",clearForm);
+
+/* ejecutar */
+seedOnce();     // carga todo el catálogo si aún no estaba aplicado
+initUI();       // prepara la interfaz
+</script>
+</body>
+</html>
