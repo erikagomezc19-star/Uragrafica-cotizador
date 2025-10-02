@@ -12,7 +12,7 @@
   .topbar .bar{display:flex;justify-content:space-between;align-items:center}
   .logo{font-weight:800}
   h1{margin-top:6px;font-size:20px;font-weight:800;text-align:center}
-  .actions{display:flex;gap:8px}
+  .actions{display:flex;gap:8px;align-items:center}
   button{cursor:pointer}
   .primary{background:#2ecc71;color:#fff;border:none;border-radius:8px;padding:8px 12px}
   .secondary{background:#0b57d0;color:#fff;border:none;border-radius:8px;padding:8px 12px}
@@ -45,7 +45,6 @@
   .edit{background:#e8f5e9;border:1px solid #c8e6c9;color:#1b5e20;padding:6px 10px;border-radius:8px;cursor:pointer;margin-right:6px}
 
   .mt8{margin-top:8px}
-
   .print{display:none}
   @media print{.topbar,.card:not(.print){display:none!important}.print{display:block;border:none;box-shadow:none}}
 </style>
@@ -55,6 +54,9 @@
   <div class="bar">
     <div class="logo">Uragráfica</div>
     <div class="actions">
+      <span id="authBadge" class="chip" title="Estado de edición">Invitado</span>
+      <button id="btnLogin" class="ghost">Entrar</button>
+      <button id="btnLogout" class="ghost" style="display:none">Salir</button>
       <button id="btnCalcular" class="primary">Calcular</button>
       <button id="btnPrint" class="secondary">Imprimir / PDF</button>
     </div>
@@ -171,8 +173,28 @@ ADHESIVO 80X40 SIN LAMINAR	1	25000
   </section>
 </main>
 
-<script>
-/* ===== helpers ===== */
+<!-- Firebase + App -->
+<script type="module">
+/* ================= Firebase (SDK v10+) ================= */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, onSnapshot, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+/* ❶ Pega aquí TU configuración */
+const firebaseConfig = {
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_AUTH_DOMAIN",
+  projectId: "TU_PROJECT_ID",
+  storageBucket: "TU_BUCKET",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const docRef = doc(db, "uragrafica", "catalogo");
+
+/* ================= Helpers UI/formatos ================= */
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
 const fmt=new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
@@ -180,18 +202,27 @@ const money=v=>fmt.format(Math.round(v||0));
 const int=n=>Math.max(0,parseInt(n||0,10));
 const clean=s=>(s||"").toString().trim();
 
-/* ===== categorización automática (STICKERS ≠ ADHESIVOS) ===== */
+function setAuthBadge(user){
+  const badge=$("#authBadge");
+  const btnIn=$("#btnLogin"), btnOut=$("#btnLogout");
+  if(user){ badge.textContent="Editor"; btnIn.style.display="none"; btnOut.style.display="inline-block"; }
+  else{ badge.textContent="Invitado"; btnIn.style.display="inline-block"; btnOut.style.display="none"; }
+}
+$("#btnLogin").addEventListener("click", async ()=>{
+  const email=prompt("Correo (usuario editor):");
+  const pass =prompt("Contraseña:");
+  if(!email||!pass) return;
+  try{ await signInWithEmailAndPassword(auth,email,pass); }
+  catch(e){ alert("No se pudo iniciar sesión: "+e.message); }
+});
+$("#btnLogout").addEventListener("click",()=>signOut(auth));
+onAuthStateChanged(auth, setAuthBadge);
+
+/* ============ Categorización automática ============ */
 function autoCategory(name){
   const s=(name||"").toUpperCase();
-
-  // ► STICKERS (y variantes)
-  if (/(^|\s)STI?C?K?KER(S)?\b|(^|\s)STIKER(S)?\b|PEGATINA(S)?\b|CALCOMANI(A|AS)\b/.test(s))
-    return "Stickers";
-
-  // ► ADHESIVOS (NO incluye “sticker”)
-  if (/\bADHESIV(O|A|OS|AS)\b|VINIL(O|OS)\b|MICROPERFORAD/.test(s))
-    return "Adhesivos";
-
+  if (/(^|\s)STI?C?K?KER(S)?\b|(^|\s)STIKER(S)?\b|PEGATINA(S)?\b|CALCOMANI(A|AS)\b/.test(s)) return "Stickers";
+  if (/\bADHESIV(O|A|OS|AS)\b|VINIL(O|OS)\b|MICROPERFORAD/.test(s)) return "Adhesivos";
   if(/VASO|MUG|TAZA/.test(s)) return "Vasos/Mugs";
   if(/TARJETA/.test(s)) return "Tarjetas";
   if(/VOLANTE/.test(s)) return "Volantes";
@@ -212,42 +243,47 @@ function autoCategory(name){
   return "Otros";
 }
 
-/* ===== catálogo base mínimo (fallback) ===== */
-const BASE = {
-  "Tarjetas":[{name:"TARJETAS DE PRESENTACIÓN BRILLO (1000)",tiers:[{qty:1000,price:130000}]}],
-  "Volantes":[{name:"VOLANTE MEDIA CARTA PROPALCOTE 115 4X0",tiers:[{qty:1000,price:150000}]}]
-};
-
-const STORAGE="uragrafica_cat_v10";
-const SEED_FLAG="uragrafica_seed_v10";
-
-let CAT;
-try{ CAT=JSON.parse(localStorage.getItem(STORAGE)) || JSON.parse(JSON.stringify(BASE)); }
-catch{ CAT=JSON.parse(JSON.stringify(BASE)); }
-function persist(){ try{ localStorage.setItem(STORAGE, JSON.stringify(CAT)); }catch{} }
-
-/* índice */
+/* ============ Catálogo en memoria + índice ============ */
+let CAT={};        // se trae de Firestore
 let INDEX={};
+
 function rebuildIndex(){
   INDEX={};
   Object.keys(CAT).forEach(k=>{
     INDEX[k]={};
-    CAT[k].forEach(it=>INDEX[k][it.name]=it);
+    (CAT[k]||[]).forEach(it=>INDEX[k][it.name]=it);
   });
 }
+function ensureCat(name){ if(!CAT[name]) CAT[name]=[]; }
+function findItem(cat,name){ return (CAT[cat]||[]).find(x=>x.name===name); }
+function upsertUnit(cat,name,price){
+  ensureCat(cat); let it=findItem(cat,name);
+  if(!it){ it={name,unit:price}; CAT[cat].push(it); }
+  else { it.unit=price; delete it.tiers; }
+}
+function upsertTier(cat,name,qty,price){
+  ensureCat(cat); let it=findItem(cat,name);
+  if(!it){ it={name,tiers:[]}; CAT[cat].push(it); }
+  it.tiers=it.tiers||[];
+  const ex=it.tiers.find(t=>t.qty===qty);
+  if(ex) ex.price=price; else it.tiers.push({qty,price});
+  it.tiers.sort((a,b)=>a.qty-b.qty); delete it.unit;
+}
 
-/* selects */
+/* ============ Selects / UI ============ */
 function fillCats(){
-  const sel=$("#categoria"); sel.innerHTML="";
+  const sel=$("#categoria"); const keep=sel.value; sel.innerHTML="";
   Object.keys(CAT).sort().forEach(c=>{
     const o=document.createElement("option"); o.value=o.textContent=c; sel.appendChild(o);
   });
+  if(keep && CAT[keep]) sel.value=keep;
 }
 function fillProducts(){
-  const cat=$("#categoria").value; const sel=$("#producto"); sel.innerHTML="";
+  const cat=$("#categoria").value; const sel=$("#producto"); const keep=sel.value; sel.innerHTML="";
   (CAT[cat]||[]).map(x=>x.name).sort().forEach(n=>{
     const o=document.createElement("option"); o.value=o.textContent=n; sel.appendChild(o);
   });
+  if((CAT[cat]||[]).some(x=>x.name===keep)) sel.value=keep;
 }
 function setHint(){
   const cat=$("#categoria").value, name=$("#producto").value;
@@ -260,49 +296,33 @@ function setHint(){
   } else el.textContent="Ítem sin precio.";
 }
 
-/* ===== CÁLCULO (ajustado: prorrateo con TIER INFERIOR) ===== */
+/* ============ Cálculo (usa tier inferior) ============ */
 function priceByQty(it,qty){
   if(!it) return {base:0};
-  // unitario puro
   if(it.unit && !(it.tiers?.length)) return {base:it.unit*qty};
-
   if(it.tiers?.length){
     const tiers=[...it.tiers].sort((a,b)=>a.qty-b.qty);
-    // 1) exacto
     const exact=tiers.find(t=>t.qty===qty);
     if(exact) return {base:exact.price};
-
-    // 2) buscar inferior y superior
     let lower=null, higher=null;
-    for(const t of tiers){
-      if(t.qty<=qty) lower=t;
-      if(t.qty>=qty){ higher=t; break; }
-    }
-    // Regla: usar SIEMPRE el inferior si existe, si no, el primero (superior mínimo)
+    for(const t of tiers){ if(t.qty<=qty) lower=t; if(t.qty>=qty){ higher=t; break; } }
     const chosen = lower || higher || tiers[0];
     const unit = chosen.price/ chosen.qty;
     return {base:unit*qty};
   }
   return {base:0};
 }
-
 function calcular(){
   const cat=$("#categoria").value, name=$("#producto").value, qty=int($("#cantidad").value);
   const incIVA=$("#incluirIVA").checked;
   const it=(INDEX[cat]||{})[name];
-  const {base}=priceByQty(it,qty);   // nota oculta
-  const subtotal=base;
-  const iva=incIVA?subtotal*0.19:0;
-  const total=subtotal+iva;
+  const {base}=priceByQty(it,qty);
+  const subtotal=base, iva=incIVA?subtotal*0.19:0, total=subtotal+iva;
 
   $("#detalle").innerHTML = `
-    <div class="row">
-      <div>${name}</div>
-      <div class="money">${money(base)}</div>
-    </div>
+    <div class="row"><div>${name}</div><div class="money">${money(base)}</div></div>
     <hr style="border:none;border-top:1px dashed #c9d3dd;margin:6px 0;">
-    <div class="row"><span>IVA ${incIVA?"(19%)":"(no incluido)"} </span><strong>${money(iva)}</strong></div>
-  `;
+    <div class="row"><span>IVA ${incIVA?"(19%)":"(no incluido)"}</span><strong>${money(iva)}</strong></div>`;
   $("#subProd").textContent=money(subtotal+iva);
   $("#total").textContent=money(total);
 
@@ -315,54 +335,7 @@ function calcular(){
     <div class="row"><strong>TOTAL:</strong><span>${money(total)}</span></div>`;
 }
 
-/* gestión */
-function ensureCat(name){ if(!CAT[name]) CAT[name]=[]; }
-function findItem(cat,name){ return (CAT[cat]||[]).find(x=>x.name===name); }
-function upsertUnit(cat,name,price){
-  ensureCat(cat);
-  let it=findItem(cat,name);
-  if(!it){ it={name,unit:price}; CAT[cat].push(it); }
-  else { it.unit=price; delete it.tiers; }
-}
-function upsertTier(cat,name,qty,price){
-  ensureCat(cat);
-  let it=findItem(cat,name);
-  if(!it){ it={name,tiers:[]}; CAT[cat].push(it); }
-  it.tiers=it.tiers||[];
-  const ex=it.tiers.find(t=>t.qty===qty);
-  if(ex) ex.price=price; else it.tiers.push({qty,price});
-  it.tiers.sort((a,b)=>a.qty-b.qty); delete it.unit;
-}
-function saveAndRefresh(selectCat){
-  persist(); rebuildIndex(); fillCats();
-  if(selectCat) $("#categoria").value=selectCat;
-  fillProducts(); setHint(); renderTable();
-}
-function agregar(){
-  const cat = clean($("#g_cat").value) || $("#categoria").value || "Catálogo";
-  const name= clean($("#g_name").value);
-  const tipo=$("#g_tipo").value;
-  const qty = int($("#g_qty").value);
-  const price = int($("#g_price").value);
-  if(!cat || !name || (tipo==="tier" && (!qty||!price)) || (tipo==="unit" && !price)){
-    alert("Completa categoría, producto y precio (y cantidad si es por tier)."); return;
-  }
-  if(tipo==="unit") upsertUnit(cat,name,price); else upsertTier(cat,name,qty,price);
-  saveAndRefresh(cat);
-  $("#g_name").value=""; $("#g_price").value="0"; $("#g_qty").value="1000";
-}
-function clearForm(){
-  $("#g_cat").value=""; $("#g_name").value="";
-  $("#g_tipo").value="tier";
-  $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1; $("#g_qty").value="1000";
-  $("#g_price").value="0";
-}
-$("#g_tipo").addEventListener("change",()=>{
-  const isU=$("#g_tipo").value==="unit";
-  $("#g_qty").disabled=isU;
-  $("#g_qty_wrap").style.opacity = isU ? 0.35 : 1;
-});
-
+/* ============ Render tabla + gestionar CRUD ============ */
 function renderTable(){
   const cat=$("#categoria").value; const cont=$("#tablaCat"); const arr=CAT[cat]||[];
   if(!arr.length){ cont.innerHTML="<div class='muted' style='padding:8px'>No hay ítems.</div>"; return; }
@@ -384,11 +357,11 @@ function renderTable(){
     <tbody>${rows}</tbody></table>`;
 
   cont.querySelectorAll(".del").forEach(b=>{
-    b.addEventListener("click",()=>{
+    b.addEventListener("click",async ()=>{
       const i=parseInt(b.dataset.i,10);
       if(!confirm("¿Seguro que quieres eliminar este ítem del catálogo?")) return;
       CAT[cat].splice(i,1);
-      saveAndRefresh(cat);
+      await persist();
     });
   });
   cont.querySelectorAll(".edit").forEach(b=>{
@@ -413,17 +386,43 @@ function renderTable(){
     });
   });
 }
+$("#g_tipo").addEventListener("change",()=>{
+  const isU=$("#g_tipo").value==="unit";
+  $("#g_qty").disabled=isU;
+  $("#g_qty_wrap").style.opacity = isU ? 0.35 : 1;
+});
+async function agregar(){
+  const cat = clean($("#g_cat").value) || $("#categoria").value || "Catálogo";
+  const name= clean($("#g_name").value);
+  const tipo=$("#g_tipo").value;
+  const qty = int($("#g_qty").value);
+  const price = int($("#g_price").value);
+  if(!cat || !name || (tipo==="tier" && (!qty||!price)) || (tipo==="unit" && !price)){
+    alert("Completa categoría, producto y precio (y cantidad si es por tier)."); return;
+  }
+  if(tipo==="unit") upsertUnit(cat,name,price); else upsertTier(cat,name,qty,price);
+  await persist();
+  $("#g_name").value=""; $("#g_price").value="0"; $("#g_qty").value="1000";
+}
+function clearForm(){
+  $("#g_cat").value=""; $("#g_name").value="";
+  $("#g_tipo").value="tier";
+  $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1; $("#g_qty").value="1000";
+  $("#g_price").value="0";
+}
+$("#btnAgregar").addEventListener("click",agregar);
+$("#btnLimpiar").addEventListener("click",clearForm);
 
-/* importación masiva */
+/* ============ Importación masiva ============ */
 function parseMoney(s){
   s=(s||"").toString().trim();
   s=s.replace(/[^\d,\.]/g,"");
-  if(/^\d+,\d+$/.test(s)) s=s.replace(",", ""); // 6,60 -> 660 (formato legado)
+  if(/^\d+,\d+$/.test(s)) s=s.replace(",", "");
   s=s.replace(/\./g,"").replace(/,/g,"");
   const v=parseInt(s||"0",10);
   return isFinite(v)?v:0;
 }
-function bulkImport(txt,{auto=true,dest="Catálogo"}={}){
+function bulkInto(catObj, txt, {auto=true,dest="Catálogo"}={}){
   const lines=(txt||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
   for(const ln of lines){
     const p=ln.split(/\t+/);
@@ -431,15 +430,42 @@ function bulkImport(txt,{auto=true,dest="Catálogo"}={}){
     const name=clean(p[0]); const qty=int(p[1]); const price=parseMoney(p[2]);
     if(!name||!qty||price<0) continue;
     const cat = auto ? autoCategory(name) : dest;
-    upsertTier(cat,name,qty,price);
+    if(!catObj[cat]) catObj[cat]=[];
+    // upsert local al objeto catObj:
+    let it = (catObj[cat]||[]).find(x=>x.name===name);
+    if(!it){ it={name,tiers:[]}; catObj[cat].push(it); }
+    it.tiers = it.tiers || [];
+    const ex = it.tiers.find(t=>t.qty===qty);
+    if(ex) ex.price=price; else it.tiers.push({qty,price});
+    it.tiers.sort((a,b)=>a.qty-b.qty);
+    delete it.unit;
   }
-  saveAndRefresh();
+}
+$("#btnBulk").addEventListener("click",async ()=>{
+  const txt=$("#bulk_text").value;
+  const auto=$("#bulk_autocat").checked;
+  const dest=clean($("#bulk_cat").value)||"Catálogo";
+  bulkInto(CAT,txt,{auto,dest});
+  await persist();
+});
+
+/* ============ Persistir/leer de Firestore (en vivo) ============ */
+async function persist(){
+  try{
+    await setDoc(docRef,{cat:CAT, updatedAt:serverTimestamp(), version:1},{merge:true});
+  }catch(e){
+    alert("No se pudo guardar en la nube (¿sesión de editor?): "+e.message);
+  }
+}
+function applyCAT(newCat){
+  CAT = newCat || {};
+  rebuildIndex();
+  fillCats(); fillProducts(); setHint(); renderTable();
 }
 
-/* ======== SEED COMPLETO (tus datos actualizados) ======== */
+/* ============ Seed grande (tu catálogo completo) ============ */
 const SEED = `
-
-/* --- SELLOS (precios nuevos) + CAJAS TRODAT --- */
+/* --- SELLOS --- */
 SELLOS AUTOMATICOS 4911	1	55000
 SELLOS AUTOMATICOS 4912	1	60000
 SELLOS AUTOMATICOS 4913	1	65000
@@ -448,15 +474,13 @@ SELLO AUTOMATICO FECHERO S-542D	1	90000
 CAJA DE SELLO TRODAT 4911	1	21000
 CAJA DE SELLO TRODAT 4912	1	24200
 CAJA DE SELLO TRODAT 4913	1	28300
-
-/* --- STICKERS (categoría independiente) --- */
+/* --- STICKERS --- */
 STICKER LAMINADO TROQUELADO 5X5	1000	178000
 STICKER SIN LAMINAR TROQUELADO 5X5	1000	136000
 STICKER LAMINADO TROQUELADO 7X7	1000	342000
 STICKER SIN LAMINAR TROQUELADO 5X5	1000	260000
 STICKERS 4X4	100	40000
-
-/* --- TALONARIOS (lista completa) --- */
+/* --- TALONARIOS (TODOS) --- */
 TALONARIO 1/2 CARTA UNA COPIA QUIMICO	1	40000
 TALONARIO 1/2 CARTA UNA COPIA QUIMICO	2	50000
 TALONARIO 1/2 CARTA ORIGINAL Y DOS COPIAS QUIMICO	2	60000
@@ -543,8 +567,7 @@ TALONARIO LORD 12.5 X 17.5 SOLO ORIGINAL	20	147000
 TALONARIO X 100 HOJAS ORIGINAL	5	55000
 TALONARIO 1/8 DE OFICIO EN BOND	50	280000
 TALONARIO 1/8 DE OFICIO EN BOND	100	220000
-
-/* --- OTRAS CATEGORÍAS --- */
+/* --- OTRAS CATEGORÍAS (resumido) --- */
 VASO MUGS	1	18000
 GOMA SELLO	1	15000
 CARTA MENÚ	10	18000
@@ -581,8 +604,6 @@ PENDON DE 1,00 mts X 2,00 mts	1	135000
 PENDON DE 70X50	1	50000
 PENDON DE 70X100	1	60000
 PENDON DE 2,00 MTS X 2,00 MTS	1	292000
-LONA O BANNER SIN LAMINAR	1	5
-LONA BANNER  SIN LAMINAR CON INSTALACION	1	660
 BOLETAS FULL COLOR	1000	350000
 BOLETA FULL COLOR EN CARTULINA DE 7 X 16	200	60000
 BOLETAS FULL COLOR EN CARTULINA O PROPALCOTE	100	60000
@@ -594,51 +615,42 @@ BOTONES	1	5000
 IMPRESIÓN EN BOND TAMAÑO CARTA 1X0 SIN ENGOMAR, SIN NUMERAR	1	80000
 VALLA DE 12 X 4 INSTALADA	1	8500000
 BACKING CON OJALES DE 300 X 200 (6,6)	1	396000
-LONA BANNER LAMINADO INSTALADO	1	750
 ADHESIVO 80X40 SIN LAMINAR	1	25000
-PENDON DE 2,00 MTS X 2,00 MTS	1	292000
 ADHESIVO PLASTICO DE 6 CM X 6 CM	1000	180000
-TIJERA/ROMPE TRAFICO con luces	1	3900
-SELLO CON FECHADOR	1	70000
-ADHESIVO TAMAÑO CARTA FULL COLOR	1000	725
-TABLAS DE PRECIO	1	15000
-CARNET PVC UN SOLO LADO 5,4x8,5	1	6500
-CARNET PVC 4X1	1	8500
-CARNET PVC 4X4 FULL COLOR AMBOS LADOS	1	10000
-CARNET EN TESLI UN LADO	1	3500
-CARNET EN TESLI 4*1	1	4000
-CARNETEN TESLI 4*4	1	5000
-ABANICO EN CARTON DISEÑO AMBOS LADOS	1000	1050000
-BOLETAS EN PAPEL BOND	500	0
-BOLETAS EN PAPEL PROPALCOTE	500	0
 PENDON CON ARAÑA MEDIDA 1METRO X 2 METROS	1	280000
 AGENDAS TAMAÑO CARTA 22X28	1	90000
-AGENDAS TAMAÑO 22 x24	1	60000
-AGENDAS TAMAÑO 22 x25	5	250000
-AGENDAS TAMAÑO 22 x26	10	450000
-AGENDAS TAMAÑO 1/2 CARTA	1	35000
-AGENDAS TAMAÑO 1/2 CARTA	5	150000
-AGENDAS TAMAÑO 1/2 CARTA	10	280000
-PENDÓN CON ROLL UP 100x200metros	1	350000
 VOLANTES 1/4 CARTA BLANCO Y NEGRO	3000	85000
 VOLANTES 1/4 CARTA FULL COLOR 4X4	3000	270000
-TARJETAS 7,5X13,5 EN CARTULINA	2000	0
-LLAVEROS	1	5000
 VOLANTES 4X0 PRECIO FINAL	500	120000
 AGENDA TAMAÑO CARTA	1	90000
 SELLO EN MADERA	1	45000
 PASTELITOS	1000	100000
-
 `;
 
-/* aplica el seed una sola vez */
-function seedOnce(){
-  if(localStorage.getItem(SEED_FLAG)) return;
-  bulkImport(SEED,{auto:true});
-  localStorage.setItem(SEED_FLAG,"1");
+/* ============ Cargar inicial desde Firestore (con seed si no existe) ============ */
+async function firstLoad(){
+  const snap=await getDoc(docRef);
+  if(snap.exists()){
+    applyCAT(snap.data().cat || {});
+  }else{
+    // construir CAT desde SEED y guardar
+    let seedObj={};
+    bulkInto(seedObj, SEED, {auto:true});
+    CAT = seedObj;
+    await persist(); // crea doc
+    applyCAT(CAT);
+  }
+  // suscripción en tiempo real
+  onSnapshot(docRef,(d)=>{
+    if(!d.exists()) return;
+    const cloudCat=d.data().cat || {};
+    // evita re-render si es idéntico
+    if(JSON.stringify(cloudCat)===JSON.stringify(CAT)) return;
+    CAT=cloudCat; applyCAT(CAT);
+  });
 }
 
-/* init */
+/* ============ Eventos generales ============ */
 function initUI(){
   rebuildIndex();
   fillCats(); fillProducts(); setHint(); renderTable();
@@ -647,12 +659,10 @@ $("#btnCalcular").addEventListener("click",calcular);
 $("#btnPrint").addEventListener("click",()=>window.print());
 $("#categoria").addEventListener("change",()=>{fillProducts();setHint();renderTable();});
 $("#producto").addEventListener("change",setHint);
-$("#btnAgregar").addEventListener("click",agregar);
-$("#btnLimpiar").addEventListener("click",clearForm);
 
-/* ejecutar */
-seedOnce();     // carga todo el catálogo si aún no estaba aplicado
-initUI();       // prepara la interfaz
+/* run */
+await firstLoad();
+initUI();
 </script>
 </body>
 </html>
