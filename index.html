@@ -41,6 +41,7 @@
   .tabla-cat th,.tabla-cat td{padding:8px;border-top:1px solid #eef2f6;font-size:13px}
   .tabla-cat thead th{background:#f7fafc;text-align:left;color:#274664}
   .chip{background:#eef6ff;border:1px solid #cfe2ff;padding:0 8px;border-radius:12px;font-size:12px}
+
   .del{background:#ffebee;border:1px solid #ffcdd2;color:#c62828;padding:6px 10px;border-radius:8px;cursor:pointer}
   .edit{background:#e8f5e9;border:1px solid #c8e6c9;color:#1b5e20;padding:6px 10px;border-radius:8px;cursor:pointer;margin-right:6px}
 
@@ -54,9 +55,7 @@
   <div class="bar">
     <div class="logo">Uragráfica</div>
     <div class="actions">
-      <span id="authBadge" class="chip" title="Estado de edición">Invitado</span>
-      <button id="btnLogin" class="ghost">Entrar</button>
-      <button id="btnLogout" class="ghost" style="display:none">Salir</button>
+      <span id="syncBadge" class="chip">Sincronizando…</span>
       <button id="btnCalcular" class="primary">Calcular</button>
       <button id="btnPrint" class="secondary">Imprimir / PDF</button>
     </div>
@@ -175,12 +174,11 @@ ADHESIVO 80X40 SIN LAMINAR	1	25000
 
 <!-- Firebase + App -->
 <script type="module">
-/* ================= Firebase (SDK v10+) ================= */
+/* ===== Firebase (SDK v10+) ===== */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, getDoc, onSnapshot, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-/* ❶ Pega aquí TU configuración */
+/* ⚠️ Pega aquí TU configuración */
 const firebaseConfig = {
   apiKey: "TU_API_KEY",
   authDomain: "TU_AUTH_DOMAIN",
@@ -189,36 +187,23 @@ const firebaseConfig = {
   messagingSenderId: "TU_SENDER_ID",
   appId: "TU_APP_ID"
 };
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app);
 const docRef = doc(db, "uragrafica", "catalogo");
 
-/* ================= Helpers UI/formatos ================= */
+/* ===== Helpers / formato ===== */
 const $=s=>document.querySelector(s);
-const $$=s=>[...document.querySelectorAll(s)];
 const fmt=new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
 const money=v=>fmt.format(Math.round(v||0));
 const int=n=>Math.max(0,parseInt(n||0,10));
 const clean=s=>(s||"").toString().trim();
+const BADGE=$("#syncBadge");
+const LSK="uragrafica_cache_v1";
 
-function setAuthBadge(user){
-  const badge=$("#authBadge");
-  const btnIn=$("#btnLogin"), btnOut=$("#btnLogout");
-  if(user){ badge.textContent="Editor"; btnIn.style.display="none"; btnOut.style.display="inline-block"; }
-  else{ badge.textContent="Invitado"; btnIn.style.display="inline-block"; btnOut.style.display="none"; }
-}
-$("#btnLogin").addEventListener("click", async ()=>{
-  const email=prompt("Correo (usuario editor):");
-  const pass =prompt("Contraseña:");
-  if(!email||!pass) return;
-  try{ await signInWithEmailAndPassword(auth,email,pass); }
-  catch(e){ alert("No se pudo iniciar sesión: "+e.message); }
-});
-$("#btnLogout").addEventListener("click",()=>signOut(auth));
-onAuthStateChanged(auth, setAuthBadge);
+function setBadge(txt){ BADGE.textContent=txt; }
 
-/* ============ Categorización automática ============ */
+/* ===== Auto-categoría (Stickers ≠ Adhesivos) ===== */
 function autoCategory(name){
   const s=(name||"").toUpperCase();
   if (/(^|\s)STI?C?K?KER(S)?\b|(^|\s)STIKER(S)?\b|PEGATINA(S)?\b|CALCOMANI(A|AS)\b/.test(s)) return "Stickers";
@@ -243,8 +228,8 @@ function autoCategory(name){
   return "Otros";
 }
 
-/* ============ Catálogo en memoria + índice ============ */
-let CAT={};        // se trae de Firestore
+/* ===== Estado ===== */
+let CAT={};  // catálogo en memoria
 let INDEX={};
 
 function rebuildIndex(){
@@ -254,23 +239,8 @@ function rebuildIndex(){
     (CAT[k]||[]).forEach(it=>INDEX[k][it.name]=it);
   });
 }
-function ensureCat(name){ if(!CAT[name]) CAT[name]=[]; }
-function findItem(cat,name){ return (CAT[cat]||[]).find(x=>x.name===name); }
-function upsertUnit(cat,name,price){
-  ensureCat(cat); let it=findItem(cat,name);
-  if(!it){ it={name,unit:price}; CAT[cat].push(it); }
-  else { it.unit=price; delete it.tiers; }
-}
-function upsertTier(cat,name,qty,price){
-  ensureCat(cat); let it=findItem(cat,name);
-  if(!it){ it={name,tiers:[]}; CAT[cat].push(it); }
-  it.tiers=it.tiers||[];
-  const ex=it.tiers.find(t=>t.qty===qty);
-  if(ex) ex.price=price; else it.tiers.push({qty,price});
-  it.tiers.sort((a,b)=>a.qty-b.qty); delete it.unit;
-}
 
-/* ============ Selects / UI ============ */
+/* ===== UI ===== */
 function fillCats(){
   const sel=$("#categoria"); const keep=sel.value; sel.innerHTML="";
   Object.keys(CAT).sort().forEach(c=>{
@@ -296,7 +266,7 @@ function setHint(){
   } else el.textContent="Ítem sin precio.";
 }
 
-/* ============ Cálculo (usa tier inferior) ============ */
+/* ===== Cálculo (usa tier inferior si no hay exacto) ===== */
 function priceByQty(it,qty){
   if(!it) return {base:0};
   if(it.unit && !(it.tiers?.length)) return {base:it.unit*qty};
@@ -335,7 +305,49 @@ function calcular(){
     <div class="row"><strong>TOTAL:</strong><span>${money(total)}</span></div>`;
 }
 
-/* ============ Render tabla + gestionar CRUD ============ */
+/* ===== CRUD catálogo ===== */
+function ensureCat(name){ if(!CAT[name]) CAT[name]=[]; }
+function findItem(cat,name){ return (CAT[cat]||[]).find(x=>x.name===name); }
+function upsertUnit(cat,name,price){
+  ensureCat(cat); let it=findItem(cat,name);
+  if(!it){ it={name,unit:price}; CAT[cat].push(it); }
+  else { it.unit=price; delete it.tiers; }
+}
+function upsertTier(cat,name,qty,price){
+  ensureCat(cat); let it=findItem(cat,name);
+  if(!it){ it={name,tiers:[]}; CAT[cat].push(it); }
+  it.tiers=it.tiers||[];
+  const ex=it.tiers.find(t=>t.qty===qty);
+  if(ex) ex.price=price; else it.tiers.push({qty,price});
+  it.tiers.sort((a,b)=>a.qty-b.qty); delete it.unit;
+}
+async function agregar(){
+  const cat = clean($("#g_cat").value) || $("#categoria").value || "Catálogo";
+  const name= clean($("#g_name").value);
+  const tipo=$("#g_tipo").value;
+  const qty = int($("#g_qty").value);
+  const price = int($("#g_price").value);
+  if(!cat || !name || (tipo==="tier" && (!qty||!price)) || (tipo==="unit" && !price)){
+    alert("Completa categoría, producto y precio (y cantidad si es por tier)."); return;
+  }
+  if(tipo==="unit") upsertUnit(cat,name,price); else upsertTier(cat,name,qty,price);
+  await persist();
+  $("#g_name").value=""; $("#g_price").value="0"; $("#g_qty").value="1000";
+}
+function clearForm(){
+  $("#g_cat").value=""; $("#g_name").value="";
+  $("#g_tipo").value="tier";
+  $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1; $("#g_qty").value="1000";
+  $("#g_price").value="0";
+}
+$("#g_tipo").addEventListener("change",()=>{
+  const isU=$("#g_tipo").value==="unit";
+  $("#g_qty").disabled=isU;
+  $("#g_qty_wrap").style.opacity = isU ? 0.35 : 1;
+});
+$("#btnAgregar").addEventListener("click",agregar);
+$("#btnLimpiar").addEventListener("click",clearForm);
+
 function renderTable(){
   const cat=$("#categoria").value; const cont=$("#tablaCat"); const arr=CAT[cat]||[];
   if(!arr.length){ cont.innerHTML="<div class='muted' style='padding:8px'>No hay ítems.</div>"; return; }
@@ -386,38 +398,12 @@ function renderTable(){
     });
   });
 }
-$("#g_tipo").addEventListener("change",()=>{
-  const isU=$("#g_tipo").value==="unit";
-  $("#g_qty").disabled=isU;
-  $("#g_qty_wrap").style.opacity = isU ? 0.35 : 1;
-});
-async function agregar(){
-  const cat = clean($("#g_cat").value) || $("#categoria").value || "Catálogo";
-  const name= clean($("#g_name").value);
-  const tipo=$("#g_tipo").value;
-  const qty = int($("#g_qty").value);
-  const price = int($("#g_price").value);
-  if(!cat || !name || (tipo==="tier" && (!qty||!price)) || (tipo==="unit" && !price)){
-    alert("Completa categoría, producto y precio (y cantidad si es por tier)."); return;
-  }
-  if(tipo==="unit") upsertUnit(cat,name,price); else upsertTier(cat,name,qty,price);
-  await persist();
-  $("#g_name").value=""; $("#g_price").value="0"; $("#g_qty").value="1000";
-}
-function clearForm(){
-  $("#g_cat").value=""; $("#g_name").value="";
-  $("#g_tipo").value="tier";
-  $("#g_qty").disabled=false; $("#g_qty_wrap").style.opacity=1; $("#g_qty").value="1000";
-  $("#g_price").value="0";
-}
-$("#btnAgregar").addEventListener("click",agregar);
-$("#btnLimpiar").addEventListener("click",clearForm);
 
-/* ============ Importación masiva ============ */
+/* ===== Importación masiva ===== */
 function parseMoney(s){
   s=(s||"").toString().trim();
   s=s.replace(/[^\d,\.]/g,"");
-  if(/^\d+,\d+$/.test(s)) s=s.replace(",", "");
+  if(/^\d+,\d+$/.test(s)) s=s.replace(",", ""); // 6,60 -> 660
   s=s.replace(/\./g,"").replace(/,/g,"");
   const v=parseInt(s||"0",10);
   return isFinite(v)?v:0;
@@ -431,7 +417,6 @@ function bulkInto(catObj, txt, {auto=true,dest="Catálogo"}={}){
     if(!name||!qty||price<0) continue;
     const cat = auto ? autoCategory(name) : dest;
     if(!catObj[cat]) catObj[cat]=[];
-    // upsert local al objeto catObj:
     let it = (catObj[cat]||[]).find(x=>x.name===name);
     if(!it){ it={name,tiers:[]}; catObj[cat].push(it); }
     it.tiers = it.tiers || [];
@@ -449,23 +434,9 @@ $("#btnBulk").addEventListener("click",async ()=>{
   await persist();
 });
 
-/* ============ Persistir/leer de Firestore (en vivo) ============ */
-async function persist(){
-  try{
-    await setDoc(docRef,{cat:CAT, updatedAt:serverTimestamp(), version:1},{merge:true});
-  }catch(e){
-    alert("No se pudo guardar en la nube (¿sesión de editor?): "+e.message);
-  }
-}
-function applyCAT(newCat){
-  CAT = newCat || {};
-  rebuildIndex();
-  fillCats(); fillProducts(); setHint(); renderTable();
-}
-
-/* ============ Seed grande (tu catálogo completo) ============ */
+/* ===== Seed (catálogo) ===== */
 const SEED = `
-/* --- SELLOS --- */
+/* --- SELLOS (actualizados) + CAJAS TRODAT --- */
 SELLOS AUTOMATICOS 4911	1	55000
 SELLOS AUTOMATICOS 4912	1	60000
 SELLOS AUTOMATICOS 4913	1	65000
@@ -480,7 +451,7 @@ STICKER SIN LAMINAR TROQUELADO 5X5	1000	136000
 STICKER LAMINADO TROQUELADO 7X7	1000	342000
 STICKER SIN LAMINAR TROQUELADO 5X5	1000	260000
 STICKERS 4X4	100	40000
-/* --- TALONARIOS (TODOS) --- */
+/* --- TALONARIOS (completos) --- */
 TALONARIO 1/2 CARTA UNA COPIA QUIMICO	1	40000
 TALONARIO 1/2 CARTA UNA COPIA QUIMICO	2	50000
 TALONARIO 1/2 CARTA ORIGINAL Y DOS COPIAS QUIMICO	2	60000
@@ -567,7 +538,7 @@ TALONARIO LORD 12.5 X 17.5 SOLO ORIGINAL	20	147000
 TALONARIO X 100 HOJAS ORIGINAL	5	55000
 TALONARIO 1/8 DE OFICIO EN BOND	50	280000
 TALONARIO 1/8 DE OFICIO EN BOND	100	220000
-/* --- OTRAS CATEGORÍAS (resumido) --- */
+/* --- OTRAS CATEGORÍAS (resumen) --- */
 VASO MUGS	1	18000
 GOMA SELLO	1	15000
 CARTA MENÚ	10	18000
@@ -627,32 +598,69 @@ SELLO EN MADERA	1	45000
 PASTELITOS	1000	100000
 `;
 
-/* ============ Cargar inicial desde Firestore (con seed si no existe) ============ */
-async function firstLoad(){
-  const snap=await getDoc(docRef);
-  if(snap.exists()){
-    applyCAT(snap.data().cat || {});
-  }else{
-    // construir CAT desde SEED y guardar
-    let seedObj={};
-    bulkInto(seedObj, SEED, {auto:true});
-    CAT = seedObj;
-    await persist(); // crea doc
-    applyCAT(CAT);
+/* ===== Persistencia (Firestore + localStorage) ===== */
+async function persist(){
+  try{
+    await setDoc(docRef,{cat:CAT, updatedAt:serverTimestamp(), version:1},{merge:true});
+    localStorage.setItem(LSK, JSON.stringify(CAT));
+    setBadge("Sincronizado en la nube");
+  }catch(e){
+    // Fallback: guardar local y avisar
+    localStorage.setItem(LSK, JSON.stringify(CAT));
+    setBadge("Guardado local (sin conexión a nube)");
+    console.warn("No se pudo guardar en Firestore:", e);
   }
-  // suscripción en tiempo real
-  onSnapshot(docRef,(d)=>{
-    if(!d.exists()) return;
-    const cloudCat=d.data().cat || {};
-    // evita re-render si es idéntico
-    if(JSON.stringify(cloudCat)===JSON.stringify(CAT)) return;
-    CAT=cloudCat; applyCAT(CAT);
-  });
+}
+function applyCAT(newCat){
+  CAT = newCat || {};
+  rebuildIndex();
+  fillCats(); fillProducts(); setHint(); renderTable();
 }
 
-/* ============ Eventos generales ============ */
+/* ===== Carga inicial ===== */
+async function firstLoad(){
+  try{
+    const snap=await getDoc(docRef);
+    if(snap.exists()){
+      applyCAT(snap.data().cat || {});
+      setBadge("Conectado (lectura en vivo)");
+    }else{
+      // crear desde SEED
+      let seedObj={};
+      bulkInto(seedObj, SEED, {auto:true});
+      CAT = seedObj;
+      await persist(); // crea documento
+      applyCAT(CAT);
+      setBadge("Catálogo creado en la nube");
+    }
+    // suscripción en tiempo real
+    onSnapshot(docRef,(d)=>{
+      if(!d.exists()) return;
+      const cloudCat=d.data().cat || {};
+      if(JSON.stringify(cloudCat)===JSON.stringify(CAT)) return;
+      CAT=cloudCat; applyCAT(CAT);
+      setBadge("Actualizado (en vivo)");
+    });
+  }catch(e){
+    console.warn("Fallo Firestore, usando cache/local:", e);
+    const cache = localStorage.getItem(LSK);
+    if(cache){
+      applyCAT(JSON.parse(cache));
+      setBadge("Modo local (cache)");
+    }else{
+      // última opción: seed local
+      let seedObj={};
+      bulkInto(seedObj, SEED, {auto:true});
+      CAT = seedObj;
+      localStorage.setItem(LSK, JSON.stringify(CAT));
+      applyCAT(CAT);
+      setBadge("Inicializado local (sin nube)");
+    }
+  }
+}
+
+/* ===== Eventos generales ===== */
 function initUI(){
-  rebuildIndex();
   fillCats(); fillProducts(); setHint(); renderTable();
 }
 $("#btnCalcular").addEventListener("click",calcular);
@@ -666,3 +674,4 @@ initUI();
 </script>
 </body>
 </html>
+
