@@ -177,10 +177,10 @@ ADHESIVO 80X40 SIN LAMINAR	1	25000
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot,
-  serverTimestamp, query, orderBy
+  serverTimestamp, query, orderBy, getDocs, limit, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-/* ⚠️ TU CONFIG AQUÍ */
+/* ⚠️ CONFIGURA ESTO CON TU PROYECTO */
 const firebaseConfig = {
   apiKey: "TU_API_KEY",
   authDomain: "TU_AUTH_DOMAIN",
@@ -190,10 +190,15 @@ const firebaseConfig = {
   appId: "TU_APP_ID"
 };
 
-const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
-const col = collection(db, "catalog");
+let db=null;
+try{
+  const app = initializeApp(firebaseConfig);
+  db = getFirestore(app);
+}catch(e){
+  console.warn("Firebase no inicializado (seguiré local):", e);
+}
 
+/* ====== util ====== */
 const $=s=>document.querySelector(s);
 const fmt=new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
 const money=v=>fmt.format(Math.round(v||0));
@@ -202,13 +207,7 @@ const clean=s=>(s||"").toString().trim();
 const BADGE=$("#syncBadge");
 function setBadge(t){ BADGE.textContent=t; }
 
-/* ======= Estado ======= */
-let CAT={};      // {categoria: [items]}
-let INDEX={};    // {categoria: {name: item}}
-const CACHE="uragrafica_cache_v4";
-
-/* ======= Helpers ======= */
-const docId = (cat,name)=>encodeURIComponent(`${cat}:::${name}`);
+/* ====== categorización ====== */
 function autoCategory(name){
   const s=(name||"").toUpperCase();
   if (/(^|\s)STI?C?K?KER(S)?\b|(^|\s)STIKER(S)?\b|PEGATINA(S)?\b|CALCOMANI(A|AS)\b/.test(s)) return "Stickers";
@@ -233,7 +232,12 @@ function autoCategory(name){
   return "Otros";
 }
 
-/* ======= UI ======= */
+/* ====== estado ====== */
+let CAT={};    // {categoria: [items]}
+let INDEX={};  // {categoria:{name:item}}
+const CACHE="uragrafica_cache_v6";   // ← bump: ignora caches viejas vacías
+
+/* ====== UI ====== */
 function rebuildIndex(){
   INDEX={};
   Object.keys(CAT).forEach(k=>{
@@ -267,7 +271,7 @@ function setHint(){
 }
 function renderTable(){
   const cat=$("#categoria").value; const cont=$("#tablaCat"); const arr=CAT[cat]||[];
-  if(!arr.length){ cont.innerHTML="<div class='muted' style='padding:8px'>No hay ítems.</div>"; return; }
+  if(!arr.length){ cont.innerHTML="<div class='muted' style='padding:8px'>No hay items.</div>"; return; }
   const rows=arr.map((it)=>{
     const tipo=it.unit?`<span class="chip">Unitario</span>`:`<span class="chip">Por cantidad</span>`;
     const val = it.unit? money(it.unit) : it.tiers.map(t=>`${t.qty}→${money(t.price)}`).join(" · ");
@@ -290,7 +294,8 @@ function renderTable(){
       const cat=$("#categoria").value;
       const name=decodeURIComponent(b.dataset.name);
       if(!confirm(`¿Eliminar “${name}”?`)) return;
-      await deleteDoc(doc(db,"catalog",docId(cat,name)));
+      if(!db){ alert("Sin Firestore. Revisa la config."); return; }
+      await deleteDoc(doc(db,"catalog",encodeURIComponent(`${cat}:::${name}`)));
       setBadge("Eliminado ✓");
     });
   });
@@ -318,12 +323,11 @@ function renderTable(){
   });
 }
 function applyAndRender(){
-  localStorage.setItem(CACHE, JSON.stringify(CAT));
+  try{ localStorage.setItem(CACHE, JSON.stringify(CAT)); }catch{}
   rebuildIndex(); fillCats(); fillProducts(); setHint(); renderTable();
-  setBadge("Listo ✓");
 }
 
-/* ======= Cálculo ======= */
+/* ====== cálculo ====== */
 function priceByQty(it,qty){
   if(!it) return {base:0};
   if(it.unit && !(it.tiers?.length)) return {base:it.unit*qty};
@@ -362,19 +366,278 @@ function calcular(){
     <div class="row"><strong>TOTAL:</strong><span>${money(total)}</span></div>`;
 }
 
-/* ======= CRUD remoto ======= */
-async function upsertItem(item){
-  await setDoc(doc(db,"catalog",docId(item.category,item.name)), {
-    ...item,
-    updatedAt: serverTimestamp()
-  });
+/* ====== SEED (tu catálogo actualizado) ====== */
+const SEED = `SELLOS AUTOMATICOS 4911	1	55000
+SELLOS AUTOMATICOS 4912	1	60000
+SELLOS AUTOMATICOS 4913	1	65000
+SELLO AUTOMATICO DE BOLSILLO	1	55000
+SELLO AUTOMATICO FECHERO S-542D	1	90000
+CAJA DE SELLO TRODAT 4911	1	21000
+CAJA DE SELLO TRODAT 4912	1	24200
+CAJA DE SELLO TRODAT 4913	1	28300
+STICKER LAMINADO TROQUELADO 5X5	1000	178000
+STICKER SIN LAMINAR TROQUELADO 5X5	1000	136000
+STICKER LAMINADO TROQUELADO 7X7	1000	342000
+STICKER SIN LAMINAR TROQUELADO 5X5	1000	260000
+STICKERS 4X4	100	40000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	1	40000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	2	50000
+TALONARIO 1/2 CARTA ORIGINAL Y DOS COPIAS QUIMICO	2	60000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	3	55000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	5	75000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	10	110000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	20	180000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO	50	387000
+TALONARIO 1/2 CARTA UNA COPIA QUIMICO A 2 TINTAS	50	474000
+TALONARIO 1/2 CARTA DOS COPIAS QUIMICO	1	35000
+TALONARIO 1/2 CARTA DOS COPIAS QUIMICO	5	85000
+TALONARIO 1/2 CARTA DOS COPIAS QUIMICO	10	140850
+TALONARIO 1/2 CARTA DOS COPIAS QUIMICO	20	248350
+TALONARIO 20 x 14 ORIGINAL Y UNA  COPIAS QUIMICO SIN NUMERAR	50	125000
+TALONARIO 1/2 OFICIO UNA COPIA QUIMICO	1	40000
+TALONARIO 1/2 OFICIO DOS COPIA QUIMICO	1	35000
+TALONARIO 1/2 OFICIO UNA COPIA QUIMICO	2	40000
+TALONARIO 1/2 OFICIO UNA COPIA QUIMICO	5	70000
+TALONARIO 1/2 OFICIO UNA COPIA QUIMICO 20x16	10	122000
+TALONARIO 1/2 OFICIO UNA COPIA QUIMICO NUMERADOS	30	252000
+TALONARIO 1/2 OFICIO DOS  COPIA QUIMICO	10	142000
+TALONARIO 25X17.5 UNA COPIA QUIMICO	1	35000
+TALONARIO 25X17.5 UNA COPIA QUIMICO	2	45000
+TALONARIO 25X17.5 UNA COPIA QUIMICO	5	75000
+TALONARIO 25X17.5 UNA COPIA QUIMICO	10	122850
+TALONARIO 25X17.5 UNA COPIA QUIMICO	20	222500
+TALONARIO 1/4 DE CARTA UNA COPIA QUIMICO	2	35000
+TALONARIO 1/4 DE CARTA UNA COPIA QUIMICO	5	65000
+TALONARIO 1/4 DE CARTA UNA COPIA QUIMICO	10	70000
+TALONARIO 1/4 DE CARTA UNA COPIA QUIMICO	20	100000
+TALONARIO 1/4 DE CARTA UNA COPIA QUIMICO	50	198600
+TALONARIO 1/4 DE CARTA PAPEL BOND ORIGINAL SIN NUMERAR	50	120000
+TALONARIO 1/4 DE CARTA PAPEL BOND ORIGINAL	10	50000
+TALONARIO 1/4 OFICIO UNA COPIA QUIMICO	2	35000
+TALONARIO 1/4 OFICIO UNA COPIA QUIMICO	5	75000
+TALONARIO 1/4 OFICIO DOS COPIA QUIMICO	10	131650
+TALONARIO 1/4 OFICIO UNA COPIA QUIMICO  12x9	10	90000
+TALONARIO 1/4 OFICIO UNA COPIA QUIMICO	20	105000
+TALONARIO 1/4 OFICIO UNA COPIA QUIMICO	100	450000
+TALONARIO 1/4 OFICIO ORIGINAL Y DOS COPIAS EN QUIMICO	20	173400
+TALONARIO 1/4 OFICIO UNA COPIA QUIMICO FULL COLOR	5	105000
+TALONARIO CARTA UNA COPIA QUIMICO	1	40000
+TALONARIO CARTA UNA COPIA QUIMICO	2	50000
+TALONARIO CARTA UNA COPIA QUIMICO	5	90000
+TALONARIO CARTA UNA COPIA QUIMICO	10	155250
+TALONARIO CARTA UNA COPIA QUIMICO	20	337500
+TALONARIO OFICIO UNA COPIA QUIMICO	1	40000
+TALONARIO OFICIO UNA COPIA QUIMICO	2	50000
+TALONARIO OFICIO UNA COPIA QUIMICO	5	95000
+TALONARIO OFICIO UNA COPIA QUIMICO	10	177450
+TALONARIO OFICIO SOLO ORIGINAL	1	56000
+TALONARIO OFICIO SOLO ORIGINAL	5	91000
+TALONARIO OFICIO SOLO ORIGINAL	10	130000
+TALONARIO OFICIO SOLO ORIGINAL	20	250000
+TALONARIO 1/2 CARTA UNA COPIA BOND	5	60000
+TALONARIO 1/2 CARTA UNA COPIA BOND	10	80000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND	10	85000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND TIRO - RETIRO	10	96650
+TALONARIO 1/2 OFICIO UNA COPIA BOND	5	80000
+TALONARIO 1/2 OFICIO UNA COPIA BOND	10	110000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND	3	42000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND	5	65000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND	10	85000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND FULL COLOR	40	305000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND	20	109500
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND A DOS TINTAS	30	195000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND RECETARIOS	10	85000
+TALONARIO 1/2 CARTA SOLO ORIGINAL BOND RECETARIOS	5	55000
+TALONARIO CARTA SOLO ORIGINAL BOND	1	40000
+TALONARIO CARTA SOLO ORIGINAL BOND SIN NUMERAR	3	46650
+TALONARIO CARTA SOLO ORIGINAL BOND	5	70000
+TALONARIO CARTA SOLO ORIGINAL BOND	10	158350
+TALONARIO CARTA SOLO ORIGINAL BOND NUMERADO 1*1	20	286650
+TALONARIO CARTA TIRO RETIRO BOND	5	96650
+TALONARIO CARTA TIRO RETIRO BOND	10	117000
+TALONARIO 1/4 DE OFICIO EN BOND SIN NUMERAR	10	50000
+TALONARIO 1/4 DE OFICIO EN BOND  NUMERADO	5	51350
+TALONARIO LORD 12.5 X 17.5 QUIMICO DOS COPIAS	10	94500
+TALONARIO LORD 12.5 X 17.5 QUIMICO DOS COPIAS	20	146650
+TALONARIO LORD 12.5 X 17.5 QUIMICO UNA COPIA	10	95000
+TALONARIO LORD 12.5 X 17.5 QUIMICO UNA COPIA	20	105000
+TALONARIO LORD 12.5 X 17.5 SOLO ORIGINAL 	10	55000
+TALONARIO LORD 12.5 X 17.5 SOLO ORIGINAL 	20	147000
+TALONARIO X 100 HOJAS ORIGINAL 	5	55000
+TALONARIO 1/8 DE OFICIO EN BOND	50	280000
+TALONARIO 1/8 DE OFICIO EN BOND	100	220000
+VASO MUGS	1	18000
+GOMA SELLO	1	15000
+CARTA MENÚ	10	18000
+CARTA MENU TAMAÑO CARTA X 6 PAGINAS DOBLES	1	36000
+AGENDAS 25 X 17.5 	1	45000
+AGENDAS MEDIO OFICIO 23X16.5	1	35000
+CARNET EN PVC INDIVIDUAL	1	10000
+CARNET EN PVC CON PORTA CARNET	1	18000
+TARJETAS DE PRESETACION BRILLO	1000	130000
+TARJETAS DE PRESETACION MATTE	1000	160000
+TARJETAS DE PRESETACION MATE Y RESERVA	1000	180000
+TARJETAS IMANTADAS	1000	400000
+TARJETAS DE PRESENTACION MATTE CON RESERVA UN LADO 	1000	143000
+TARJETAS DE PRSENTACION MATTE CON RESERVA DOS LADO 	1000	158000
+TARJETAS DE PRESETACION LAMINADA	100	30000
+TARJETAS DE PRESETACION LAMINADA	500	100000
+TARJETAS DE COBRO 14 X 8	1000	70000
+TARJETAS DE COBRO 14 X 8	500	55000
+VOLANTES MEDIA CARTA PROPALCOTE 115 4X0	1000	150000
+VOLANTES MEDIA CARTA PROPALCOTE 115 DOS LADOS 4X4	1000	240000
+VOLANTES MEDIA CARTA PROPALCOTE 115 UNA TINTA	1000	100000
+VOLANTES MEDIA CARTA FULL COLOR  PAPEL BOND A DOS  TINTA	1000	100000
+VOLANTES MEDIA CARTA PAPEL BOND UNA TINTA	1000	90000
+VOLANTES MEDIA CARTA UNA TINTA EN BOND	500	80000
+VOLANTES MEDIA CARTA PROPALCOTE 115  FULL COLOR	500	100000
+CORTE DE PAPEL	1	5000
+TABLERO EN ACRILICO DE 80 X 1,50 CON ADHESIVO AL ESPEJO CON BUJES	1	324000
+LAPICERO ESTAMPADO	1	4000
+LAPICERO ESTAMPADO EN PROPALCOTE	1	3000
+LAMINA OPAL SOLA 	1	8000
+PENDON DE 60X40 	1	30000
+PENDON DE 1,00 mts X 1,20 mts	1	110000
+PENDON DE 1,00 mts X 2,00 mts	1	135000
+PENDON DE 70X50	1	50000
+PENDON DE 70X100	1	60000
+PENDON DE 2,00 MTS X 2,00 MTS	1	292000
+LONA O BANNER SIN LAMINAR	1	5
+LONA BANNER  SIN LAMINAR CON INSTALACION	1	660
+BOLETAS FULL COLOR	1000	350000
+BOLETA FULL COLOR EN CARTULINA DE 7 X 16	200	60000
+BOLETAS FULL COLOR EN CARTULINA O PROPALCOTE	100	60000
+ADHESIVO DE 4 CM X 4 CM SIN LAMINAR	1000	60000
+AFICHE TAMAÑO CARTA 	1	20000
+BOTONES	1	5000
+IMPRESIÓN EN BOND TAMAÑO CARTA 1X0 SIN ENGOMAR, SIN NUMERAR	1	80000
+VALLA DE 12 X 4 INSTALADA	1	8500000
+BACKING CON OJALES DE 300 X 200 (6,6)	1	396000
+ADHESIVO 80X40 SIN LAMINAR 	1	25000
+PENDON DE 2,00 MTS X 2,00 MTS	1	292000
+ADHESIVO PLASTICO DE 6 CM X 6 CM 	1000	180000
+SELLO CON FECHADOR 	1	70000
+ADHESIVO TAMAÑO CARTA FULL COLOR	1000	725
+TABLAS DE PRECIO 	1	15000
+CARNET PVC UN SOLO LADO 5,4x8,5	1	6500
+ CARNET PVC 4X1	1	8500
+CARNET PVC 4X4 FULL COLOR AMBOS LADOS	1	10000
+CARNET EN TESLI UN LADO	1	3500
+CARNET EN TESLI 4*1	1	4000
+CARNETEN TESLI 4*4	1	5000
+ABANICO EN CARTON DISEÑO AMBOS LADOS 	1000	1050000
+PENDON CON ARAÑA MEDIDA 1METRO X 2 METROS	1	280000
+AGENDAS TAMAÑO CARTA 22X28	1	90000
+AGENDAS TAMAÑO 22 x24	1	60000
+AGENDAS TAMAÑO 22 x25	5	250000
+AGENDAS TAMAÑO 22 x26	10	450000
+AGENDAS TAMAÑO 1/2 CARTA	1	35000
+AGENDAS TAMAÑO 1/2 CARTA	5	150000
+AGENDAS TAMAÑO 1/2 CARTA	10	280000
+PENDÓN CON ROLL UP 100x200metros	1	350000
+VOLANTES 1/4 CARTA BLANCO Y NEGRO	3000	85000
+VOLANTES 1/4 CARTA FULL COLOR 4X4	3000	270000
+TARJETAS 7,5X13,5 EN CARTULINA	2000	0
+LLAVEROS	1	5000
+VOLANTES 4X0 PRECIO FINAL	500	120000
+AGENDA TAMAÑO CARTA 	1	90000
+SELLO EN MADERA 	1	45000
+PASTELITOS	1000	100000`;
+
+/* ====== parse seed ====== */
+function parseSeedToMap(txt){
+  const map = new Map();
+  const lines=(txt||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  for(const ln of lines){
+    const p=ln.split(/\t+/);
+    if(p.length<3) continue;
+    const name=clean(p[0]); const qty=int(p[1]); const price=int((p[2]||"").toString().replace(/[^\d]/g,""));
+    if(!name||!qty||price<0) continue;
+    const cat = autoCategory(name);
+    const key = `${cat}:::${name}`;
+    if(!map.has(key)) map.set(key,{category:cat,name,unit:null,tiers:[]});
+    const item = map.get(key);
+    const ex = (item.tiers||[]).find(t=>t.qty===qty);
+    if(ex) ex.price=price; else item.tiers.push({qty,price});
+  }
+  for(const it of map.values()) it.tiers.sort((a,b)=>a.qty-b.qty);
+  return map;
 }
-function ensureCat(c){ if(!CAT[c]) CAT[c]=[]; }
-function upsertLocal(item){
-  ensureCat(item.category);
-  const arr=CAT[item.category];
-  const i = arr.findIndex(x=>x.name===item.name);
-  if(i>=0) arr[i]=item; else arr.push(item);
+function mapToCAT(map){
+  const next={};
+  for(const it of map.values()){
+    if(!next[it.category]) next[it.category]=[];
+    next[it.category].push(it);
+  }
+  return next;
+}
+
+/* ====== carga inmediata: cache válida o semilla ====== */
+function loadImmediate(){
+  let loaded=false;
+  try{
+    const raw=localStorage.getItem(CACHE);
+    if(raw){
+      const parsed=JSON.parse(raw);
+      if(parsed && Object.keys(parsed).length){ CAT=parsed; loaded=true; setBadge("Cache ✓"); }
+    }
+  }catch{}
+  if(!loaded){
+    CAT = mapToCAT(parseSeedToMap(SEED));  // siempre muestra algo
+    setBadge("Semilla local ✓");
+  }
+  applyAndRender();
+}
+
+/* ====== sembrar en Firestore si está vacío ====== */
+async function seedRemoteIfEmpty(){
+  if(!db) return;
+  const colRef = collection(db,"catalog");
+  const snap = await getDocs(query(colRef, limit(1)));
+  if(!snap.empty){ setBadge("Remoto ✓"); return; }
+  setBadge("Sembrando en Firestore…");
+  const m=parseSeedToMap(SEED);
+  const entries=[...m.entries()];
+  let i=0;
+  while(i<entries.length){
+    const batch=writeBatch(db);
+    for(let j=0;j<500 && i<entries.length;j++,i++){
+      const [key,item]=entries[i];
+      batch.set(doc(db,"catalog",encodeURIComponent(key)), {...item,updatedAt:serverTimestamp()});
+    }
+    await batch.commit();
+  }
+  setBadge("Sembrado ✓");
+}
+
+/* ====== live sync ====== */
+function subscribe(){
+  if(!db) return;
+  const colRef = collection(db,"catalog");
+  const q = query(colRef, orderBy("category"), orderBy("name"));
+  onSnapshot(q, (snap)=>{
+    const next={};
+    snap.forEach(d=>{
+      const it=d.data();
+      if(!next[it.category]) next[it.category]=[];
+      next[it.category].push({
+        category:it.category, name:it.name,
+        unit: it.unit ?? null,
+        tiers: Array.isArray(it.tiers)? it.tiers.map(t=>({qty:t.qty,price:t.price})).sort((a,b)=>a.qty-b.qty) : []
+      });
+    });
+    if(Object.keys(next).length){
+      CAT=next; applyAndRender(); setBadge("En vivo ✓");
+    }
+  }, (err)=>{ console.warn(err); setBadge("Offline (cache)"); });
+}
+
+/* ====== CRUD ====== */
+async function upsertItem(item){
+  if(!db){ alert("Sin Firestore. Revisa firebaseConfig y reglas."); return; }
+  await setDoc(doc(db,"catalog",encodeURIComponent(`${item.category}:::${item.name}`)), {
+    ...item, updatedAt: serverTimestamp()
+  });
 }
 async function agregar(){
   const cat = clean($("#g_cat").value) || $("#categoria").value || "Catálogo";
@@ -385,91 +648,48 @@ async function agregar(){
   if(!cat || !name || (tipo==="tier" && (!qty||!price)) || (tipo==="unit" && !price)){
     alert("Completa categoría, producto y precio (y cantidad si es por tier)."); return;
   }
-  const item = {category:cat, name, unit:null, tiers:[]};
+  let item = {category:cat, name, unit:null, tiers:[]};
   if(tipo==="unit"){ item.unit=price; }
   else { item.tiers=[{qty,price}]; }
-
-  // Merge tiers si ya existe localmente
   const prev = (CAT[cat]||[]).find(x=>x.name===name);
   if(prev){
-    if(tipo==="unit"){ item.tiers = []; }
+    if(tipo==="unit"){ item.tiers=[]; }
     else{
-      const map = new Map();
+      const map=new Map();
       (prev.tiers||[]).forEach(t=>map.set(t.qty,t.price));
       map.set(qty,price);
-      item.tiers = [...map.entries()].map(([q,p])=>({qty:q,price:p})).sort((a,b)=>a.qty-b.qty);
+      item.tiers=[...map.entries()].map(([q,p])=>({qty:q,price:p})).sort((a,b)=>a.qty-b.qty);
     }
   }
-
-  await upsertItem(item); // remoto; onSnapshot actualizará a todos
+  await upsertItem(item);
   setBadge("Guardado ✓");
   $("#g_name").value=""; $("#g_price").value="0"; $("#g_qty").value="1000";
 }
 
-/* ======= Carga inicial (cache + tiempo real) ======= */
-function loadCache(){
-  try{
-    const raw=localStorage.getItem(CACHE);
-    if(raw){ CAT=JSON.parse(raw)||{}; applyAndRender(); setBadge("Cache ✓"); }
-  }catch{}
-}
-function subscribe(){
-  const q = query(col, orderBy("category"), orderBy("name"));
-  onSnapshot(q, (snap)=>{
-    const next={};
-    snap.forEach(d=>{
-      const it=d.data();
-      ensureCat(it.category);
-      const item={
-        category: it.category,
-        name: it.name,
-        unit: it.unit ?? null,
-        tiers: Array.isArray(it.tiers)? it.tiers.map(t=>({qty:t.qty,price:t.price})).sort((a,b)=>a.qty-b.qty) : []
-      };
-      ensureCat(item.category);
-      if(!next[item.category]) next[item.category]=[];
-      next[item.category].push(item);
-    });
-    CAT=next; applyAndRender(); setBadge("En vivo ✓");
-  }, (err)=>{
-    console.warn(err); setBadge("Offline (cache)");
-  });
-}
-
-/* ======= Importación masiva ======= */
-function parseMoney(s){
-  s=(s||"").toString().trim();
-  s=s.replace(/[^\d,\.]/g,"");
-  if(/^\d+,\d+$/.test(s)) s=s.replace(",", "");
-  s=s.replace(/\./g,"").replace(/,/g,"");
-  const v=parseInt(s||"0",10);
-  return isFinite(v)?v:0;
-}
+/* ====== bulk ====== */
 async function bulkImport(txt,{auto=true,dest="Catálogo"}={}){
+  if(!db){ alert("Sin Firestore. Revisa firebaseConfig y reglas."); return; }
   const lines=(txt||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const grouped=new Map();
   for(const ln of lines){
-    const p=ln.split(/\t+/);
-    if(p.length<3) continue;
-    const name=clean(p[0]); const qty=int(p[1]); const price=parseMoney(p[2]);
+    const p=ln.split(/\t+/); if(p.length<3) continue;
+    const name=clean(p[0]); const qty=int(p[1]); const price=int((p[2]||"").toString().replace(/[^\d]/g,""));
     if(!name||!qty||price<0) continue;
     const cat = auto ? autoCategory(name) : dest;
-    const existing = (CAT[cat]||[]).find(x=>x.name===name);
-    let item = existing ? structuredClone(existing) : {category:cat,name,unit:null,tiers:[]};
-    const i = (item.tiers||[]).findIndex(t=>t.qty===qty);
-    if(i>=0) item.tiers[i].price=price; else item.tiers.push({qty,price});
-    item.tiers.sort((a,b)=>a.qty-b.qty);
-    await upsertItem(item);
+    const key = `${cat}:::${name}`;
+    if(!grouped.has(key)) grouped.set(key,{category:cat,name,unit:null,tiers:[]});
+    const it=grouped.get(key);
+    const ex=(it.tiers||[]).find(t=>t.qty===qty);
+    if(ex) ex.price=price; else it.tiers.push({qty,price});
+  }
+  for(const it of grouped.values()){
+    it.tiers.sort((a,b)=>a.qty-b.qty);
+    await upsertItem(it);
   }
   setBadge("Importado ✓");
 }
-$("#btnBulk").addEventListener("click",()=>{
-  const txt=$("#bulk_text").value;
-  const auto=$("#bulk_autocat").checked;
-  const dest=clean($("#bulk_cat").value)||"Catálogo";
-  bulkImport(txt,{auto,dest});
-});
 
-/* ======= Eventos ======= */
+/* ====== eventos ====== */
 $("#btnCalcular").addEventListener("click",calcular);
 $("#btnPrint").addEventListener("click",()=>window.print());
 $("#categoria").addEventListener("change",()=>{fillProducts();setHint();renderTable();});
@@ -486,12 +706,17 @@ $("#g_tipo").addEventListener("change",()=>{
   $("#g_qty").disabled=isU;
   $("#g_qty_wrap").style.opacity = isU ? 0.35 : 1;
 });
+$("#btnBulk").addEventListener("click",()=>{
+  const txt=$("#bulk_text").value;
+  const auto=$("#bulk_autocat").checked;
+  const dest=clean($("#bulk_cat").value)||"Catálogo";
+  bulkImport(txt,{auto,dest});
+});
 
-/* ======= Arranque ======= */
-loadCache();   // aparece al instante
-subscribe();   // actualiza en vivo
+/* ====== arranque ====== */
+loadImmediate();          // pinta de una (seed o cache válida)
+await seedRemoteIfEmpty(); // si Firestore está vacío, lo siembra
+subscribe();               // escucha cambios en vivo (si hay Firestore)
 </script>
 </body>
 </html>
-
-
